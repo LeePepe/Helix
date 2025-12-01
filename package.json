@@ -1,0 +1,89 @@
+{
+  "name": "helix-design-workflows",
+  "displayName": "Helix: Design-to-Code Workflows",
+  "description": "Chat participant for comparing Figma designs with code and generating production-ready implementations",
+  "version": "0.1.0",
+  "publisher": "your-publisher-name",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "figma",
+    "design",
+    "chat",
+    "mcp",
+    "ai",
+    "design-system"
+  ],
+  "activationEvents": [
+    "onLanguageModel:chat"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "helix-design-workflows.helix",
+        "name": "helix",
+        "fullName": "Helix Design Workflows",
+        "description": "Compare Figma designs with code or generate production-ready code from Figma",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "fit-finish",
+            "description": "Compare Figma design with code implementation and identify differences"
+          },
+          {
+            "name": "gen-code",
+            "description": "Generate production-ready code from Figma design"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "helix.openDesignSystemGuide",
+        "title": "Helix: Open Design System Guide"
+      }
+    ],
+    "configuration": {
+      "title": "Helix Design Workflows",
+      "properties": {
+        "helix.designSystemPath": {
+          "type": "string",
+          "default": ".github/design-system-guide.md",
+          "description": "Path to design system guide (relative to workspace root)"
+        },
+        "helix.reportsPath": {
+          "type": "string",
+          "default": ".github/ui-fit-finish/reports",
+          "description": "Path for saving comparison reports"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "node esbuild.js",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.4.0"
+  }
+}
