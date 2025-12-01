@@ -57,10 +57,25 @@
           "default": ".github/design-system-guide.md",
           "description": "Path to design system guide (relative to workspace root)"
         },
+        "helix.promptsPath": {
+          "type": "string",
+          "default": ".github/prompts",
+          "description": "Path to prompt files directory (relative to workspace root)"
+        },
+        "helix.guidesPath": {
+          "type": "string",
+          "default": ".github/ui-fit-finish/tasks",
+          "description": "Path to task guide files directory (relative to workspace root)"
+        },
         "helix.reportsPath": {
           "type": "string",
           "default": ".github/ui-fit-finish/reports",
           "description": "Path for saving comparison reports"
+        },
+        "helix.enableRemoteFigma": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable remote Figma MCP for URL-based access (disabled by default)"
         }
       }
     }

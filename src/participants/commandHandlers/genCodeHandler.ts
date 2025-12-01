@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DesignSystemService } from '../../services/designSystemService';
 import { FigmaService } from '../../services/figmaService';
 import { FileService } from '../../services/fileService';
+import { PromptService } from '../../services/promptService';
 
 export interface GeneratedCode {
   code: string;
@@ -24,7 +25,8 @@ export class GenCodeHandler {
 
   constructor(
     private designSystemService: DesignSystemService,
-    private figmaService: FigmaService
+    private figmaService: FigmaService,
+    private promptService: PromptService
   ) {
     this.fileService = new FileService();
   }
@@ -37,24 +39,19 @@ export class GenCodeHandler {
   ): Promise<void> {
     stream.progress('Starting code generation from Figma...');
 
-    // Parse input: extract Figma URL
-    const figmaUrl = this.parseInput(request.prompt);
-
-    if (!figmaUrl) {
-      stream.markdown('❌ **Usage**: `@helix /gen-code <figma-url>`\n\n');
-      stream.markdown('**Example**:\n');
-      stream.markdown('```\n');
-      stream.markdown('@helix /gen-code https://figma.com/file/ABC?node-id=789:012\n');
-      stream.markdown('```\n');
-      return;
-    }
+    // Parse input: check for Figma URL
+    const figmaUrl = this.parseFigmaUrl(request.prompt);
 
     stream.markdown(`\n## Generate Code from Figma\n\n`);
-    stream.markdown(`- **Figma**: ${figmaUrl}\n\n`);
+    if (figmaUrl) {
+      stream.markdown(`- **Source**: ${figmaUrl}\n\n`);
+    } else {
+      stream.markdown(`- **Source**: Figma Desktop selection\n\n`);
+    }
 
     try {
-      // Step 1: Fetch Figma design specs
-      stream.progress('Fetching Figma design specifications...');
+      // Step 1: Fetch Figma design specs (from URL or Desktop selection)
+      stream.progress(figmaUrl ? 'Fetching Figma design from URL...' : 'Fetching Figma design from Desktop selection...');
       const figmaSpec = await this.figmaService.getDesignContext(figmaUrl);
 
       // Step 2: Generate code using LLM
@@ -99,7 +96,7 @@ export class GenCodeHandler {
       // Offer to create the file
       stream.markdown(`### Next Steps\n\n`);
       stream.markdown(`1. Review the generated code\n`);
-      stream.markdown(`2. Add localization keys to your .xcstrings file\n`);
+      stream.markdown(`2. Add localization keys to your localization file\n`);
       stream.markdown(`3. I can create the file at the suggested path for you\n`);
       stream.markdown(`4. Test in all supported themes (light/dark)\n`);
       stream.markdown(`5. Run build and lint commands\n\n`);
@@ -111,56 +108,27 @@ export class GenCodeHandler {
     }
   }
 
-  private parseInput(prompt: string): string | undefined {
-    // Extract Figma URL pattern
-    const figmaUrlMatch = prompt.match(/https:\/\/(?:www\.)?figma\.com\/[^\s]+/);
-    return figmaUrlMatch?.[0];
-  }
-
   private async generateCode(
     figmaSpec: any,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken
   ): Promise<GeneratedCode> {
-    // Use VSCode's language model to generate code
+    // Show loading notifications
+    stream.markdown('🎨 Loading design system guide...\n\n');
+    stream.markdown('📋 Loading task prompt...\n\n');
+
+    // Load design system guide
     const designSystemGuide = this.designSystemService.getGuideContent();
 
-    const systemPrompt = `You are a SwiftUI code generation specialist. Generate production-ready SwiftUI code from the Figma design specification.
+    // Load task prompt (now includes both base prompt and workflow guide)
+    const basePrompt = await this.promptService.loadTaskPrompt('gen-code');
 
-Design System Guide (use these tokens):
-${designSystemGuide.substring(0, 10000)} ... [truncated]
-
-Figma Design Specification:
-${JSON.stringify(figmaSpec, null, 2)}
-
-Requirements:
-1. Generate complete, working SwiftUI code
-2. Use design system tokens from the guide (Color.Theme.*, Typography.*, etc.)
-3. Map Figma properties to appropriate SwiftUI modifiers
-4. Include accessibility attributes for all interactive elements
-5. Use localization keys for all user-facing text (never hardcode strings)
-6. Support both light and dark themes via design system tokens
-7. Follow SwiftUI best practices
-8. Add helpful comments for complex logic
-
-Return ONLY valid JSON (no markdown, no explanation):
-{
-  "code": "string (complete SwiftUI code)",
-  "componentName": "string (component/view name)",
-  "suggestedPath": "string (suggested file path like 'src/Views/ComponentName.swift')",
-  "designTokensUsed": {
-    "colors": ["Color.Theme.primary", "Color.Theme.background"],
-    "typography": [".font(.titleLarge)", ".font(.bodyDefault)"],
-    "icons": ["FluentIcon.add", "FluentIcon.checkmark"],
-    "other": ["Constants.cornerRadius", "Shadow.medium"]
-  },
-  "localizationKeys": [
-    {
-      "key": "button.submit.title",
-      "description": "Submit button title"
-    }
-  ]
-}`;
+    // Compose final prompt (simple concatenation)
+    const systemPrompt = this.promptService.composePrompt(
+      basePrompt,
+      designSystemGuide,
+      figmaSpec
+    );
 
     const models = await vscode.lm.selectChatModels({
       vendor: 'copilot',
@@ -194,5 +162,11 @@ Return ONLY valid JSON (no markdown, no explanation):
     }
 
     throw new Error('Failed to extract generated code from LLM response');
+  }
+
+  private parseFigmaUrl(prompt: string): string | undefined {
+    // Extract Figma URL if present (starts with https://figma.com or www.figma.com)
+    const urlMatch = prompt.match(/(https?:\/\/(?:www\.)?figma\.com\/[^\s]+)/);
+    return urlMatch?.[1];
   }
 }

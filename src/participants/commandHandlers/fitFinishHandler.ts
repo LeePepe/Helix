@@ -3,6 +3,7 @@ import { DesignSystemService } from '../../services/designSystemService';
 import { FigmaService } from '../../services/figmaService';
 import { FileService } from '../../services/fileService';
 import { ReportService, ComparisonResult } from '../../services/reportService';
+import { PromptService } from '../../services/promptService';
 
 export class FitFinishHandler {
   private fileService: FileService;
@@ -10,7 +11,8 @@ export class FitFinishHandler {
 
   constructor(
     private designSystemService: DesignSystemService,
-    private figmaService: FigmaService
+    private figmaService: FigmaService,
+    private promptService: PromptService
   ) {
     this.fileService = new FileService();
     this.reportService = new ReportService();
@@ -27,22 +29,29 @@ export class FitFinishHandler {
     // Parse input: extract Figma URL and code file path
     const { figmaUrl, codeFilePath } = this.parseInput(request.prompt);
 
-    if (!figmaUrl || !codeFilePath) {
-      stream.markdown('❌ **Usage**: `@helix /fit-finish <figma-url> <code-file-path>`\n\n');
-      stream.markdown('**Example**:\n');
+    if (!codeFilePath) {
+      stream.markdown('❌ **Usage**: `@helix /fit-finish [figma-url] <code-file-path>`\n\n');
+      stream.markdown('**Examples**:\n');
       stream.markdown('```\n');
-      stream.markdown('@helix /fit-finish https://figma.com/file/ABC?node-id=123:456 src/Button.swift\n');
+      stream.markdown('# With Figma URL:\n');
+      stream.markdown('@helix /fit-finish https://figma.com/file/ABC?node-id=123:456 src/Button.swift\n\n');
+      stream.markdown('# With Desktop selection (no URL):\n');
+      stream.markdown('@helix /fit-finish src/Button.swift\n');
       stream.markdown('```\n');
       return;
     }
 
     stream.markdown(`\n## Fit & Finish Analysis\n\n`);
-    stream.markdown(`- **Figma**: ${figmaUrl}\n`);
+    if (figmaUrl) {
+      stream.markdown(`- **Figma**: ${figmaUrl}\n`);
+    } else {
+      stream.markdown(`- **Figma**: Desktop selection\n`);
+    }
     stream.markdown(`- **Code**: ${codeFilePath}\n\n`);
 
     try {
-      // Step 1: Fetch Figma design specs
-      stream.progress('Fetching Figma design specifications...');
+      // Step 1: Fetch Figma design specs (from URL or Desktop selection)
+      stream.progress(figmaUrl ? 'Fetching Figma design from URL...' : 'Fetching Figma design from Desktop selection...');
       const figmaSpec = await this.figmaService.getDesignContext(figmaUrl);
 
       // Step 2: Read code file
@@ -61,9 +70,10 @@ export class FitFinishHandler {
 
       // Step 4: Generate report
       stream.progress('Generating report...');
+      const figmaSource = figmaUrl || 'figma-desktop-selection';
       const reportPath = await this.reportService.saveComparisonReport(
         comparison,
-        figmaUrl,
+        figmaSource,
         codeFilePath
       );
 
@@ -109,11 +119,14 @@ export class FitFinishHandler {
   }
 
   private parseInput(prompt: string): { figmaUrl?: string; codeFilePath?: string } {
-    // Extract Figma URL pattern
-    const figmaUrlMatch = prompt.match(/https:\/\/(?:www\.)?figma\.com\/[^\s]+/);
-
-    // Extract file path (anything after the URL that looks like a path)
     const parts = prompt.split(/\s+/);
+
+    // Extract Figma URL if present
+    const figmaUrl = parts.find(part =>
+      part.startsWith('http') && part.includes('figma.com')
+    );
+
+    // Extract file path (looks like a code file path, not a URL)
     const codeFilePath = parts.find(part =>
       part.includes('/') && !part.startsWith('http') &&
       (part.endsWith('.swift') || part.endsWith('.ts') || part.endsWith('.tsx') ||
@@ -121,10 +134,7 @@ export class FitFinishHandler {
        part.endsWith('.py') || part.endsWith('.java') || part.endsWith('.kt'))
     );
 
-    return {
-      figmaUrl: figmaUrlMatch?.[0],
-      codeFilePath
-    };
+    return { figmaUrl, codeFilePath };
   }
 
   private async performComparison(
@@ -134,58 +144,23 @@ export class FitFinishHandler {
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken
   ): Promise<ComparisonResult> {
-    // Use VSCode's language model to analyze differences
+    // Show loading notifications
+    stream.markdown('🎨 Loading design system guide...\n\n');
+    stream.markdown('📋 Loading task prompt...\n\n');
+
+    // Load design system guide
     const designSystemGuide = this.designSystemService.getGuideContent();
 
-    const systemPrompt = `You are a design QA specialist. Compare the Figma design with the code implementation.
+    // Load task prompt (now includes both base prompt and workflow guide)
+    const basePrompt = await this.promptService.loadTaskPrompt('fit-finish');
 
-Design System Guide (for token reference):
-${designSystemGuide.substring(0, 8000)} ... [truncated]
-
-Figma Specification:
-${JSON.stringify(figmaSpec, null, 2)}
-
-Code Implementation (${codeFilePath}):
-\`\`\`
-${codeContent}
-\`\`\`
-
-Analyze and report differences across these categories:
-1. **Colors** (background, text, borders)
-2. **Typography** (font family, size, weight, line height)
-3. **Spacing** (padding, margins)
-4. **Dimensions** (width, height, corner radius)
-5. **Layout** (alignment, direction)
-6. **Visual effects** (shadows, opacity)
-
-For each difference, determine:
-- **Severity**: "critical" (affects visual appearance significantly) or "minor" (subtle difference)
-- **Property**: Name of the property (e.g., "Background Color", "Font Size")
-- **Figma Value**: Value in Figma design
-- **Code Value**: Value in code
-- **Fix**: Specific change needed (e.g., "Change background from #F0F0F0 to #FFFFFF")
-
-Also identify properties that MATCH between Figma and code.
-
-Return ONLY valid JSON (no markdown, no explanation):
-{
-  "componentName": "string (extract from Figma or code)",
-  "matchRate": number (0-100),
-  "totalDifferences": number,
-  "criticalDifferences": number,
-  "minorDifferences": number,
-  "differences": [
-    {
-      "category": "color|typography|spacing|dimension|layout|effect",
-      "severity": "critical|minor",
-      "property": "string",
-      "figmaValue": "string",
-      "codeValue": "string",
-      "fix": "string"
-    }
-  ],
-  "matches": ["list of matching properties"]
-}`;
+    // Compose final prompt (simple concatenation)
+    const systemPrompt = this.promptService.composePrompt(
+      basePrompt,
+      designSystemGuide,
+      figmaSpec,
+      { codeContent, codeFilePath }  // Additional context
+    );
 
     const models = await vscode.lm.selectChatModels({
       vendor: 'copilot',
