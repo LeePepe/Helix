@@ -5,6 +5,7 @@ import { DesignSystemService } from '../services/designSystemService';
 import { FigmaService } from '../services/figmaService';
 import { PromptService } from '../services/promptService';
 import { FileService } from '../services/fileService';
+import { ConfigService } from '../services/configService';
 
 export class HelixParticipant {
   private fitFinishHandler: FitFinishHandler;
@@ -13,10 +14,12 @@ export class HelixParticipant {
   private figmaService: FigmaService;
   private promptService: PromptService;
   private fileService: FileService;
+  private configService: ConfigService;
 
   constructor(private context: vscode.ExtensionContext) {
     this.promptService = new PromptService();
-    this.designSystemService = new DesignSystemService(this.promptService);
+    this.configService = new ConfigService();
+    this.designSystemService = new DesignSystemService(this.promptService, this.configService);
     this.figmaService = new FigmaService();
     this.fileService = new FileService();
 

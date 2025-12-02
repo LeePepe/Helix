@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 import { PromptService } from './promptService';
+import { ConfigService } from './configService';
 
 export class DesignSystemService {
   private designSystemContent: string | null = null;
   private designSystemPath: string | null = null;
   private promptService: PromptService;
+  private configService: ConfigService;
 
-  constructor(promptService: PromptService) {
+  constructor(promptService: PromptService, configService: ConfigService) {
     this.promptService = promptService;
+    this.configService = configService;
   }
 
   /**
@@ -125,7 +128,7 @@ export class DesignSystemService {
     // Use VSCode's language model to analyze the codebase
     const models = await vscode.lm.selectChatModels({
       vendor: 'copilot',
-      family: 'gpt-4'
+      family: this.configService.getModelFamily()
     });
 
     if (models.length === 0) {
@@ -166,7 +169,7 @@ export class DesignSystemService {
   private async generateDesignSystemGuide(analysis: CodebaseAnalysis): Promise<string> {
     const models = await vscode.lm.selectChatModels({
       vendor: 'copilot',
-      family: 'gpt-4'
+      family: this.configService.getModelFamily()
     });
 
     if (models.length === 0) {
