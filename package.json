@@ -82,16 +82,12 @@
             "type": "string"
           },
           "default": [
-            "edit",
-            "search",
-            "runCommands",
-            "figma-desktop/*",
+            "figma-desktop",
+            "copilot_",
             "usages",
             "vscodeAPI",
             "problems",
-            "changes",
-            "openSimpleBrowser",
-            "fetch"
+            "changes"
           ],
           "description": "Allowed tools for LLM to use. Supports exact names and wildcards (e.g., 'figma-desktop/*'). Add or remove tools to customize available capabilities."
         }
@@ -118,8 +114,5 @@
     "esbuild": "^0.20.0",
     "eslint": "^8.56.0",
     "typescript": "^5.4.0"
-  },
-  "dependencies": {
-    "@vscode/chat-extension-utils": "^0.0.0-alpha.5"
   }
 }
