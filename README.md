@@ -41,7 +41,7 @@ Generate production-ready code from Figma designs with:
 1. **Design System Guide**: Create `.github/design-system-guide.md` with your design tokens
 2. **Figma MCP Server**: Install for Figma integration
    - Install from Extensions view > MCP Servers
-   - Or see [Figma MCP Installation Guide](.github/ui-fit-finish/initialization/figma-mcp-install.md)
+   - Or see [Figma MCP Installation Guide](docs/initialization/figma-mcp-install.md)
 3. **AI Provider**: GitHub Copilot or compatible language model
 
 ### Optional
@@ -85,7 +85,7 @@ Configure the extension in VSCode settings:
 ```json
 {
   "helix.designSystemPath": ".github/design-system-guide.md",
-  "helix.reportsPath": ".github/ui-fit-finish/reports"
+  "helix.reportsPath": ".github/helix/reports"
 }
 ```
 
@@ -150,7 +150,7 @@ npm run package          # Creates .vsix file
 - Install Figma MCP server from Extensions > MCP Servers
 - Ensure Figma Desktop app is running
 - Check MCP configuration in `.vscode/mcp.json`
-- See [installation guide](.github/ui-fit-finish/initialization/figma-mcp-install.md)
+- See [installation guide](docs/initialization/figma-mcp-install.md)
 
 ### "Design system guide not found"
 - Verify `.github/design-system-guide.md` exists

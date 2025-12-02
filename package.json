@@ -4,6 +4,10 @@
   "description": "Chat participant for comparing Figma designs with code and generating production-ready implementations",
   "version": "0.1.0",
   "publisher": "tianpli",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tianpli_microsoft/Helix.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
