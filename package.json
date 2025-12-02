@@ -2,7 +2,7 @@
   "name": "helix-design-workflows",
   "displayName": "Helix: Design-to-Code Workflows",
   "description": "Chat participant for comparing Figma designs with code and generating production-ready implementations",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "tianpli",
   "repository": {
     "type": "git",

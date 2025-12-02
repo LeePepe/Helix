@@ -63,9 +63,11 @@ export class HelixParticipant {
   private async showHelp(stream: vscode.ChatResponseStream): Promise<void> {
     // Check Figma MCP availability
     const figmaStatus = this.figmaService.checkToolsAvailable();
-    // Load help content from docs
+    // Load help content from extension's docs folder
     try {
-      const helpMarkdown = await this.fileService.readFile('docs/readme/helix-help.md');
+      const helpFileUri = vscode.Uri.joinPath(this.context.extensionUri, 'docs', 'readme', 'helix-help.md');
+      const helpContent = await vscode.workspace.fs.readFile(helpFileUri);
+      const helpMarkdown = Buffer.from(helpContent).toString('utf8');
       stream.markdown(helpMarkdown);
     } catch (e) {
       stream.markdown(`# Helix Design Workflows\n\nHelp file not found. Expected at \`docs/readme/helix-help.md\`.\n`);
