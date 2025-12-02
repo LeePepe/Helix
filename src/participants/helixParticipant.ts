@@ -91,7 +91,7 @@ export class HelixParticipant {
       if (figmaStatus.hasRemote) {
         stream.markdown(`✅ **Remote MCP**: Available (URL-based access)\n`);
       }
-      stream.markdown(`\n**Available tools** (${figmaStatus.toolNames.length}):\n`);
+      stream.markdown(`\n**Available Figma MCP tools** (${figmaStatus.toolNames.length}):\n`);
       figmaStatus.toolNames.forEach(name => {
         stream.markdown(`- \`${name}\`\n`);
       });

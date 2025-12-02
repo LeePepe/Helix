@@ -36,31 +36,6 @@ export class FigmaService {
 
         const token = new vscode.CancellationTokenSource().token;
 
-        // Try Desktop MCP first (supports URLs)
-        const desktopTool = tools.find(tool =>
-          tool.name === 'mcp_figma-desktop_get_design_context'
-        );
-
-        if (desktopTool) {
-          try {
-            const result = await vscode.lm.invokeTool(
-              desktopTool.name,
-              {
-                toolInvocationToken: undefined,
-                input: {
-                  fileKey: urlParts.fileKey,
-                  nodeId: urlParts.nodeId
-                }
-              },
-              token
-            );
-            return this.parseToolResult(result);
-          } catch (desktopError) {
-            // Desktop MCP failed, try remote if enabled
-            console.warn('Desktop MCP failed for URL, trying remote:', desktopError);
-          }
-        }
-
         // Try Remote MCP if enabled
         const remoteFigmaEnabled = this.configService.isRemoteFigmaEnabled();
 
@@ -82,6 +57,31 @@ export class FigmaService {
               token
             );
             return this.parseToolResult(result);
+          }
+        }
+
+        // Try Desktop MCP (supports URLs)
+        const desktopTool = tools.find(tool =>
+          tool.name === 'mcp_figma-desktop_get_design_context'
+        );
+
+        if (desktopTool) {
+          try {
+            const result = await vscode.lm.invokeTool(
+              desktopTool.name,
+              {
+                toolInvocationToken: undefined,
+                input: {
+                  fileKey: urlParts.fileKey,
+                  nodeId: urlParts.nodeId
+                }
+              },
+              token
+            );
+            return this.parseToolResult(result);
+          } catch (desktopError) {
+            // Desktop MCP failed, try remote if enabled
+            console.warn('Desktop MCP failed for URL, trying remote:', desktopError);
           }
         }
 
@@ -342,11 +342,11 @@ export class FigmaService {
       tool.name.startsWith('mcp_figma-desktop_')
     );
 
-    const remoteTools = tools.filter(tool =>
+    const remoteTools = this.configService.isRemoteFigmaEnabled() ? tools.filter(tool =>
       tool.name.startsWith('mcp_figma_') && !tool.name.includes('desktop')
-    );
+    ) : [];
 
-    const allFigmaTools = [...desktopTools, ...remoteTools];
+    const allFigmaTools = [...desktopTools , ...remoteTools];
 
     return {
       available: allFigmaTools.length > 0,
