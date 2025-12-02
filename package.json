@@ -75,6 +75,25 @@
           "type": "string",
           "default": "claude-sonnet-4.5",
           "description": "Language model family to use for AI tasks (e.g., claude-sonnet-4.5, gpt-4, gpt-3.5-turbo)"
+        },
+        "helix.tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "edit",
+            "search",
+            "runCommands",
+            "figma-desktop/*",
+            "usages",
+            "vscodeAPI",
+            "problems",
+            "changes",
+            "openSimpleBrowser",
+            "fetch"
+          ],
+          "description": "Allowed tools for LLM to use. Supports exact names and wildcards (e.g., 'figma-desktop/*'). Add or remove tools to customize available capabilities."
         }
       }
     }
@@ -99,5 +118,8 @@
     "esbuild": "^0.20.0",
     "eslint": "^8.56.0",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@vscode/chat-extension-utils": "^0.0.0-alpha.5"
   }
 }

@@ -14,13 +14,35 @@ export interface HelixConfig {
 
   /** Language model family to use for AI tasks */
   modelFamily: string;
+
+  /** Allowed tools for LLM to use (supports wildcards like 'figma/*') */
+  tools: string[];
 }
+
+/**
+ * Default tools available for Helix tasks
+ * Supports exact names and wildcard patterns (e.g., 'figma-desktop/*')
+ */
+export const DEFAULT_TOOLS: string[] = [
+  'edit',
+  'search', 
+  'runCommands',
+  'figma-desktop/*',
+  'figma/*',
+  'usages',
+  'vscodeAPI',
+  'problems',
+  'changes',
+  'openSimpleBrowser',
+  'fetch'
+];
 
 /**
  * Default configuration values
  */
 export const DEFAULT_CONFIG: HelixConfig = {
   designSystemPath: '.github/design-system-guide.md',
-  enableRemoteFigma: false,  // Disabled by default
-  modelFamily: 'claude-sonnet-4.5'  // Default model
+  enableRemoteFigma: false,
+  modelFamily: 'claude-sonnet-4.5',
+  tools: DEFAULT_TOOLS
 };

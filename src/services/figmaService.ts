@@ -24,8 +24,9 @@ export class FigmaService {
     try {
       // If URL is provided, try Desktop MCP first, then Remote if enabled
       if (figmaUrl) {
+        console.log('Figma URL provided:', figmaUrl);
         const urlParts = this.parseFigmaUrl(figmaUrl);
-
+        console.log('Parsed Figma URL parts:', urlParts);
         if (!urlParts.fileKey || !urlParts.nodeId) {
           throw new Error(
             '❌ **Invalid Figma URL**\n\n' +
@@ -67,6 +68,8 @@ export class FigmaService {
 
         if (desktopTool) {
           try {
+            console.log('Trying Desktop MCP for Figma URL');
+
             const result = await vscode.lm.invokeTool(
               desktopTool.name,
               {
@@ -78,6 +81,7 @@ export class FigmaService {
               },
               token
             );
+            console.log('Figma design fetched via Desktop MCP for URL');
             return this.parseToolResult(result);
           } catch (desktopError) {
             // Desktop MCP failed, try remote if enabled
@@ -297,10 +301,11 @@ export class FigmaService {
 
   /**
    * Parse Figma URL to extract file key and node ID
+   * Format: https://figma.com/design/{file_key}/{file_name}?node-id=123-456
    */
   private parseFigmaUrl(url: string): FigmaUrlParts {
-    // Match file key: https://figma.com/file/ABC123/...
-    const fileKeyMatch = url.match(/file\/([^/?]+)/);
+    // Match file key: https://figma.com/design/ABC123/...
+    const fileKeyMatch = url.match(/design\/([^/?]+)/);
 
     // Match node ID: ?node-id=123-456 or ?node-id=123:456
     const nodeIdMatch = url.match(/node-id=([^&\s]+)/);

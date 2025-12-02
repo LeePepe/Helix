@@ -1,6 +1,15 @@
+# Task: GenCode - Generate Code from Figma Design
+
+Generate production-ready code from Figma designs, following project design system and coding standards.
+
+---
+
+## System Prompt
+
 You are a code generation specialist. Generate production-ready code from the Figma design specification according to the Design System Guide.
 
 Requirements:
+
 1. Generate complete, working code following the platform and language specified in the Design System Guide
 2. Use design system tokens exactly as defined in the guide
 3. Map Figma properties to appropriate framework APIs
@@ -10,34 +19,7 @@ Requirements:
 7. Follow all code patterns and conventions from the Design System Guide
 8. Add helpful comments for complex logic
 
-Return ONLY valid JSON (no markdown, no explanation):
-{
-  "code": "string (complete code)",
-  "componentName": "string (component/view name)",
-  "suggestedPath": "string (suggested file path)",
-  "designTokensUsed": {
-    "colors": ["array of color tokens used"],
-    "typography": ["array of typography tokens used"],
-    "icons": ["array of icon tokens used"],
-    "other": ["array of other tokens used"]
-  },
-  "localizationKeys": [
-    {
-      "key": "string (localization key)",
-      "description": "string (description of what this key is for)"
-    }
-  ]
-}
-
 ---
-
-# Task: GenCode - Generate Code from Figma Design
-
-**Navigation**: [DesignDev Mode](../../../chatmodes/DesignDev.chatmode.md) > [GenCode Prompt](../../../prompts/gen-code.prompt.md) > **Workflow Guide**
-
-**Related**: [Design System Guide](../../../design-system-guide.md) | [Prerequisites](../../PREREQUISITES.md)
-
-Generate production-ready code from Figma designs, following project design system and coding standards.
 
 ## Task Overview
 
@@ -48,7 +30,7 @@ This task:
 3. Fetches Figma design specifications and variables
 4. Analyzes design structure and properties
 5. Maps Figma design tokens to code design system
-6. Generates SwiftUI code following project patterns
+6. Generates code following project patterns
 7. Validates generated code for accessibility and localization
 
 ---
@@ -62,13 +44,6 @@ This task:
 **File to Load**:
 
 - `.github/design-system-guide.md` → Complete design system tokens, patterns, and code examples
-
-**Validation**:
-
-- [ ] File exists and is readable
-- [ ] Contains color tokens (Color.Theme.*)
-- [ ] Contains typography tokens (Typography.*)
-- [ ] Contains spacing constants (Constants.*)
 
 **Error Handling**:
 
@@ -109,11 +84,12 @@ I'll generate production-ready UI code following your project's design system an
 
 #### 3.1: Get Design Context
 
-**MCP Tool**: `mcp__figma__get_design_context` or `mcp__figma-desktop__get_design_context`
+**MCP Tool**: `mcp_figma-desktop_get_design_context`, `mcp_figma_get_design_context` not available
 
 **Input**: Figma URL or node ID
 
 **Extract**:
+
 - Design name and type
 - Layer structure and hierarchy
 - All child elements
@@ -150,9 +126,10 @@ I'll generate production-ready UI code following your project's design system an
 
 #### 3.3: Access Design Variables
 
-**MCP Tool**: `mcp__figma__get_variable_defs` or `mcp__figma-desktop__get_variable_defs`
+**MCP Tool**: `mcp_figma-desktop_get_variable_defs`, `mcp_figma_get_variable_defs` not available
 
 **Extract**:
+
 - Color variables used
 - Typography variables used
 - Spacing variables
@@ -165,11 +142,12 @@ Use `.github/design-system-guide.md` to convert Figma variables to code design t
 
 ### Step 4: Analyze Design Structure
 
-**Action**: Understand the component structure and determine SwiftUI implementation approach
+**Action**: Understand the component structure and determine code implementation approach
 
 #### 4.1: Identify UI Type
 
 **Determine UI Category**:
+
 - Button (interactive, with states)
 - Card/Container (layout with padding, background)
 - List Item (repeatable, with variants)
@@ -194,6 +172,7 @@ Consult `.github/design-system-guide.md` for layout patterns and code examples.
 #### 4.3: Identify States and Variants
 
 **Check for Design Variants**:
+
 - Default, Hover, Pressed, Disabled states
 - Size variants (Small, Medium, Large)
 - Style variants (Primary, Secondary, Tertiary)
@@ -335,94 +314,36 @@ Follow localization patterns documented in `.github/design-system-guide.md`.
 
 ---
 
-### Step 8: Present Generated Code
+### Step 8: Create Code File
 
-**Action**: Show code to user with explanation
+**Action**: Generate code and create file directly
 
-**Presentation Format**:
+**Logic**:
+
+- If user provided a file path → Create file at that path
+- If no path provided → Ask user for the file path
+
+**If Path Not Provided, Ask User**:
 
 ```text
-## Generated UI Code: [ViewName]
-
-### Design Source
-- Figma: [URL]
-- Design: [Figma design name]
-
-### Generated Code
-
-[Full UI code following design system patterns]
-
-### Design System Usage
-- Colors: [list of design tokens used]
-- Typography: [list of typography tokens used]
-- Icons: [list of icons used, if applicable]
-- Other: [any other design system elements used]
-
-### Suggested File Path
-[path based on UI type]
-
-### Localization Keys Required
-[list of localization keys]
-
-### Next Steps
-1. Review generated code
-2. Add localization keys
-3. Create file at suggested path
-4. Test in all supported themes
-5. Run build/lint commands
-6. Integrate into your application
+Where would you like me to save the generated code?
+Please provide the file path (e.g., src/components/MyComponent.tsx)
 ```
 
----
-
-### Step 9: Create File (if approved)
-
-**Action**: Write generated code to file
-
-**Ask User**:
-```text
-Would you like me to:
-1. Create the file at the suggested path
-2. Specify a different path
-3. Just show the code (I'll create it manually)
-
-Enter choice (1-3):
-```
-
-**If User Approves**:
-- Create file at specified path
-- Run formatting if applicable
-- Report file creation success
-
----
-
-### Step 10: Generate Summary
-
-**Action**: Provide completion summary
+**After Creating File**:
 
 ```text
-## UI Code Generation Complete ✓
+## Code Generated ✓
 
-View: [ViewName]
-File: [path]
+File: [file path]
 Figma: [URL]
 
-Design System Usage:
-- Colors: [N] design tokens used
-- Typography: [N] typography tokens used
-- Icons: [N] icons used (if applicable)
-- Other: [any other design system elements]
-
-Localization Keys Required:
-- [key1]: [description]
-- [key2]: [description]
-
-Next Steps:
-1. Add localization keys
-2. Test UI in different states/variants
-3. Test in all supported themes
-4. Run build/lint commands
-5. Integrate into your application
+Generated Structure:
+- [ComponentName]
+  - Layout: [layout type used]
+  - Subviews: [list of child components]
+  - States: [state properties if any]
+  - Props: [configurable properties]
 ```
 
 ---
@@ -503,7 +424,7 @@ Next Steps:
 - Add accessibility attributes to all interactive elements
 - Support keyboard navigation
 - Ensure sufficient color contrast
-- Test with screen readers (VoiceOver, NVDA, etc.)
+- Test with screen readers
 - Follow accessibility guidelines and project-specific requirements
 
 ### Localization

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { FitFinishHandler } from './commandHandlers/fitFinishHandler';
-import { GenCodeHandler } from './commandHandlers/genCodeHandler';
+import * as chatUtils from '@vscode/chat-extension-utils';
+import { TaskHandler } from './commandHandlers/taskHandler';
 import { DesignSystemService } from '../services/designSystemService';
 import { FigmaService } from '../services/figmaService';
 import { PromptService } from '../services/promptService';
@@ -8,8 +8,7 @@ import { FileService } from '../services/fileService';
 import { ConfigService } from '../services/configService';
 
 export class HelixParticipant {
-  private fitFinishHandler: FitFinishHandler;
-  private genCodeHandler: GenCodeHandler;
+  private taskHandler: TaskHandler;
   private designSystemService: DesignSystemService;
   private figmaService: FigmaService;
   private promptService: PromptService;
@@ -17,22 +16,18 @@ export class HelixParticipant {
   private configService: ConfigService;
 
   constructor(private context: vscode.ExtensionContext) {
-    this.promptService = new PromptService();
+    this.promptService = new PromptService(context.extensionUri);
     this.configService = new ConfigService();
     this.designSystemService = new DesignSystemService(this.promptService, this.configService);
     this.figmaService = new FigmaService();
     this.fileService = new FileService();
 
-    // Inject services into handlers
-    this.fitFinishHandler = new FitFinishHandler(
+    // Inject services into unified task handler
+    this.taskHandler = new TaskHandler(
       this.designSystemService,
       this.figmaService,
-      this.promptService
-    );
-    this.genCodeHandler = new GenCodeHandler(
-      this.designSystemService,
-      this.figmaService,
-      this.promptService
+      this.promptService,
+      context.extensionMode
     );
   }
 
@@ -41,7 +36,7 @@ export class HelixParticipant {
     context: vscode.ChatContext,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken
-  ): Promise<void> {
+  ): Promise<vscode.ChatResult> {
     try {
       // Load design system guide once (or initialize if doesn't exist)
       if (!this.designSystemService.isLoaded()) {
@@ -52,78 +47,90 @@ export class HelixParticipant {
       // Route based on slash command
       switch (request.command) {
         case 'fit-finish':
-          await this.fitFinishHandler.handle(request, context, stream, token);
-          break;
+          return await this.taskHandler.handle('fit-finish', request, context, stream, token);
         case 'gen-code':
-          await this.genCodeHandler.handle(request, context, stream, token);
-          break;
+          return await this.taskHandler.handle('gen-code', request, context, stream, token);
         default:
           // No command specified - show help
-          await this.showHelp(stream);
+          return await this.showHelp(request, context, stream, token);
       }
     } catch (error) {
       stream.markdown(`\n\n❌ **Error**: ${error instanceof Error ? error.message : String(error)}\n`);
       console.error('Helix chat participant error:', error);
+      return {};
     }
   }
 
-  private async showHelp(stream: vscode.ChatResponseStream): Promise<void> {
+  private async showHelp(
+    request: vscode.ChatRequest,
+    context: vscode.ChatContext,
+    stream: vscode.ChatResponseStream,
+    token: vscode.CancellationToken
+  ): Promise<vscode.ChatResult> {
     // Check Figma MCP availability
     const figmaStatus = this.figmaService.checkToolsAvailable();
+    
     // Load help content from docs
+    let helpContent = '';
     try {
-      const helpMarkdown = await this.fileService.readFile('docs/readme/helix-help.md');
-      stream.markdown(helpMarkdown);
+      helpContent = await this.fileService.readFile('docs/readme/helix-help.md');
     } catch (e) {
-      stream.markdown(`# Helix Design Workflows\n\nHelp file not found. Expected at \`docs/readme/helix-help.md\`.\n`);
+      helpContent = `# Helix Design Workflows\n\nHelp file not found. Expected at \`docs/readme/helix-help.md\`.\n`;
     }
 
-    // Show status of prerequisites
-    stream.markdown(`### Design System Guide\n`);
+    // Build status information
+    let statusInfo = `### Design System Guide\n`;
     if (this.designSystemService.isLoaded()) {
-      stream.markdown(`✅ Loaded from: \`${this.designSystemService.getGuidePath()}\`\n\n`);
+      statusInfo += `✅ Loaded from: \`${this.designSystemService.getGuidePath()}\`\n\n`;
     } else {
-      stream.markdown(`❌ Not loaded. Configure path in settings: \`helix.designSystemPath\`\n\n`);
+      statusInfo += `❌ Not loaded. Configure path in settings: \`helix.designSystemPath\`\n\n`;
     }
 
-    stream.markdown(`### Figma MCP Tools\n`);
+    statusInfo += `### Figma MCP Tools\n`;
     if (figmaStatus.available) {
       if (figmaStatus.hasDesktop) {
-        stream.markdown(`✅ **Desktop MCP**: Available (selection-based access)\n`);
+        statusInfo += `✅ **Desktop MCP**: Available (selection-based access)\n`;
       }
       if (figmaStatus.hasRemote) {
-        stream.markdown(`✅ **Remote MCP**: Available (URL-based access)\n`);
+        statusInfo += `✅ **Remote MCP**: Available (URL-based access)\n`;
       }
-      stream.markdown(`\n**Available Figma MCP tools** (${figmaStatus.toolNames.length}):\n`);
+      statusInfo += `\n**Available Figma MCP tools** (${figmaStatus.toolNames.length}):\n`;
       figmaStatus.toolNames.forEach(name => {
-        stream.markdown(`- \`${name}\`\n`);
+        statusInfo += `- \`${name}\`\n`;
       });
     } else {
-      stream.markdown(`❌ Not installed. Please configure Figma MCP servers in \`.vscode/mcp.json\`:\n\n`);
-      stream.markdown(`**For Desktop MCP** (selection-based):\n`);
-      stream.markdown(`\`\`\`json\n`);
-      stream.markdown(`{\n`);
-      stream.markdown(`  "servers": {\n`);
-      stream.markdown(`    "figma-desktop": {\n`);
-      stream.markdown(`      "type": "http",\n`);
-      stream.markdown(`      "url": "http://127.0.0.1:3845/mcp"\n`);
-      stream.markdown(`    }\n`);
-      stream.markdown(`  }\n`);
-      stream.markdown(`}\n`);
-      stream.markdown(`\`\`\`\n\n`);
-      stream.markdown(`**For Remote MCP** (URL-based):\n`);
-      stream.markdown(`\`\`\`json\n`);
-      stream.markdown(`{\n`);
-      stream.markdown(`  "servers": {\n`);
-      stream.markdown(`    "figma": {\n`);
-      stream.markdown(`      "type": "http",\n`);
-      stream.markdown(`      "url": "https://mcp.figma.com/mcp"\n`);
-      stream.markdown(`    }\n`);
-      stream.markdown(`  }\n`);
-      stream.markdown(`}\n`);
-      stream.markdown(`\`\`\`\n`);
+      statusInfo += `❌ Not installed. Please configure Figma MCP servers in \`.vscode/mcp.json\`\n`;
     }
 
-    stream.markdown(`\n---\n\nNeed help? Just ask me about these workflows!\n`);
+    statusInfo += `\n---\n\nNeed help? Just ask me about these workflows!\n`;
+
+    // Build system prompt for help
+    const systemPrompt = `You are Helix, a design-to-code assistant. Answer the user's question based on the following help documentation and status information.
+
+# Help Documentation
+${helpContent}
+
+# Current Status
+${statusInfo}
+
+If the user has no specific question, provide a friendly overview of your capabilities.`;
+
+    // Use chat-extension-utils
+    const libResult = chatUtils.sendChatParticipantRequest(
+      request,
+      context,
+      {
+        prompt: systemPrompt,
+        responseStreamOptions: {
+          stream,
+          references: true,
+          responseText: true
+        },
+        extensionMode: this.context.extensionMode
+      },
+      token
+    );
+
+    return await libResult.result;
   }
 }

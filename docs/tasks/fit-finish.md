@@ -1,51 +1,28 @@
-You are a design QA specialist. Compare the Figma design with the code implementation according to the Design System Guide.
+# Task: Fit & Finish - Compare Figma Design with Code
 
-Analyze and report differences across these categories:
-1. **Colors** (background, text, borders)
-2. **Typography** (font family, size, weight, line height)
-3. **Spacing** (padding, margins)
-4. **Dimensions** (width, height, corner radius)
-5. **Layout** (alignment, direction, positioning)
-6. **Visual effects** (shadows, opacity, borders)
-
-For each difference, determine:
-- **Severity**: "critical" (affects visual appearance significantly) or "minor" (subtle difference)
-- **Property**: Name of the property (e.g., "Background Color", "Font Size")
-- **Figma Value**: Value in Figma design
-- **Code Value**: Value in code
-- **Fix**: Specific change needed (e.g., "Change background from #F0F0F0 to #FFFFFF")
-
-Also identify properties that MATCH between Figma and code.
-
-Return ONLY valid JSON (no markdown, no explanation):
-{
-  "componentName": "string (extract from Figma or code)",
-  "matchRate": number (0-100),
-  "totalDifferences": number,
-  "criticalDifferences": number,
-  "minorDifferences": number,
-  "differences": [
-    {
-      "category": "color|typography|spacing|dimension|layout|effect",
-      "severity": "critical|minor",
-      "property": "string (property name)",
-      "figmaValue": "string (value in Figma)",
-      "codeValue": "string (value in code)",
-      "fix": "string (specific fix needed)"
-    }
-  ],
-  "matches": ["array of properties that match between Figma and code"]
-}
+Compare Figma design specifications with code implementation, identify differences, and offer automated fixes to ensure pixel-perfect UI implementation.
 
 ---
 
-# Task: Fit & Finish - Compare Figma Design with Code
+## System Prompt
 
-**Navigation**: [DesignDev Mode](../../../chatmodes/DesignDev.chatmode.md) > **Fit & Finish Workflow**
+You are a design QA specialist. Compare the Figma design with the code implementation according to the Design System Guide.
 
-**Related**: [Design System Guide](../../../design-system-guide.md) | [Prerequisites](../../PREREQUISITES.md)
+Analyze and report differences across these categories:
 
-Compare Figma design specifications with code implementation, identify differences, and offer automated fixes to ensure pixel-perfect UI implementation.
+1. **Colors**: background, text, borders
+2. **Typography**: font family, size, weight, line height
+3. **Spacing**: padding, margins
+4. **Dimensions**: width, height, corner radius
+5. **Layout**: alignment, direction, positioning
+6. **Visual Effects**: shadows, opacity, borders
+
+For each difference, determine:
+
+- **Property**: Name of the property (e.g., "Background Color", "Font Size")
+- **Figma Value**: Value in Figma design
+- **Code Value**: Value in code implementation
+- **Fix**: Specific change needed (e.g., "Change background from #F0F0F0 to #FFFFFF")
 
 ## Task Overview
 
@@ -89,7 +66,7 @@ This task:
 **Required Inputs**:
 
 1. **Figma Target** (accept any of these):
-   - Full Figma URL: `https://www.figma.com/file/ABC123?node-id=123:456`
+   - Full Figma URL: `https://www.figma.com/design/ABC123?node-id=123:456`
    - File key + node ID: `ABC123` + `123:456`
    - Figma component ID: `123:456`
 
@@ -118,11 +95,12 @@ Please provide:
 
 #### 3.1: Get Component Context
 
-**MCP Tool**: `mcp__figma__get_design_context` or `mcp__figma-desktop__get_design_context`
+**MCP Tool**: `mcp_figma_get_design_context` or `mcp_figma-desktop_get_design_context`
 
 **Input**: Figma URL or node ID
 
 **Extract**:
+
 - Component name and type
 - Parent frame/page information
 - Design system usage
@@ -143,9 +121,9 @@ Please provide:
   - Padding, spacing
   - Alignment
 - **Typography Properties** (if text present):
-  - Font token and usage / Font family, size, weight, Line height, letter spacing
-  - Text color, alignment
-  - Text decoration
+  - Font family, size, weight
+  - Line height, letter spacing
+  - Text color, alignment, decoration
 - **Component Structure**:
   - Child elements
   - Layer hierarchy
@@ -153,9 +131,10 @@ Please provide:
 
 #### 3.3: Access Design Variables
 
-**MCP Tool**: `mcp__figma__get_variable_defs` or `mcp__figma-desktop__get_variable_defs`
+**MCP Tool**: `mcp_figma_get_variable_defs` or `mcp_figma-desktop_get_variable_defs`
 
 **Extract**:
+
 - Color variables used
 - Typography variables used
 - Spacing/dimension variables
@@ -163,9 +142,9 @@ Please provide:
 
 #### 3.4: Generate Visual Reference (Optional)
 
-**MCP Tool**: `mcp__figma__get_screenshots` or `mcp__figma-desktop__get_screenshot`
+**MCP Tool**: `mcp_figma_get_screenshots` or `mcp_figma-desktop_get_screenshot`
 
-**Purpose**: Get visual reference for comparison
+**Purpose**: Capture visual reference for comparison
 
 ---
 
@@ -333,33 +312,23 @@ Status: ❌ Vertical padding mismatch (8px vs 12px)
 
 ## Summary
 
-**Match Rate**: [X]% | **Differences**: [N] ([critical count] critical, [minor count] minor)
-**Fixes Applied**: [Y] ([if auto-fix was run])
+**Match Rate**: [X]% | **Differences**: [N]
+**Fixes Applied**: [Y] (if auto-fix was run)
 
 ## Differences
 
-### ❌ Critical
-
 1. **[Property]**: Figma `[value]` ≠ Code `[value]`
    - Fix: [specific change needed]
    - File: [path:line]
    - Status: [✓ Fixed | ⚠ Manual fix required]
 
-### ⚠️ Minor
-
-1. **[Property]**: Figma `[value]` ≠ Code `[value]`
-   - Fix: [specific change needed]
-   - File: [path:line]
-   - Status: [✓ Fixed | ⚠ Manual fix required]
-
-### ✅ Matches
+## Matches
 
 - [Property]: `[value]`
 
 ## Actions
 
-**[If fixes applied]**: Review changes with `git diff`
-**[If fixes not applied]**: Critical fixes required before shipping.
+- Review changes with `git diff`
 ```
 
 **File Location**: `reports/report-[component-name]-[YYYYMMDD-HHMMSS].md`
@@ -376,12 +345,11 @@ Status: ❌ Vertical padding mismatch (8px vs 12px)
 I found [N] differences between the Figma design and code.
 
 Would you like me to:
-1. Fix all critical issues (colors, typography, dimensions)
-2. Fix all issues including minor spacing adjustments
-3. Show proposed changes first for review
-4. Skip auto-fix (I'll do it manually)
+1. Fix all issues automatically
+2. Show proposed changes first for review
+3. Skip auto-fix (I'll do it manually)
 
-Enter choice (1-4):
+Enter choice (1-3):
 ```
 
 **If User Chooses Auto-Fix**: Proceed to Step 8
@@ -450,7 +418,7 @@ Execute project-specific formatting commands (refer to design-system-guide.md fo
 Component: [Component Name]
 Report: reports/report-[component-name]-[timestamp].md
 
-Differences: [N] total ([critical] critical, [minor] minor)
+Differences: [N] total
 Match Rate: [X]%
 
 Changes Applied:

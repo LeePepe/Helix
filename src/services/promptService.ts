@@ -2,29 +2,26 @@ import * as vscode from 'vscode';
 import { ConfigService } from './configService';
 
 /**
- * Service for loading and composing prompts from external files
+ * Service for loading and composing prompts from extension directory
  * Uses simple string concatenation (no template variables)
  */
 export class PromptService {
   private configService: ConfigService;
+  private extensionUri: vscode.Uri;
 
-  constructor() {
+  constructor(extensionUri: vscode.Uri) {
     this.configService = new ConfigService();
+    this.extensionUri = extensionUri;
   }
 
   /**
-   * Load a task-specific prompt from docs/tasks/
+   * Load a task-specific prompt from extension's docs/tasks/
    */
   async loadTaskPrompt(taskName: 'fit-finish' | 'gen-code'): Promise<string> {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error('No workspace folder open');
-    }
-
-    // Load task prompt from docs/tasks
+    // Load task prompt from extension's docs/tasks
     const guidesPath = 'docs/tasks';
     const promptFile = `${taskName}.md`;
-    const promptUri = vscode.Uri.joinPath(workspaceFolder.uri, guidesPath, promptFile);
+    const promptUri = vscode.Uri.joinPath(this.extensionUri, guidesPath, promptFile);
 
     try {
       const fileContent = await vscode.workspace.fs.readFile(promptUri);
@@ -38,17 +35,12 @@ export class PromptService {
   }
 
   /**
-   * Load any prompt file by name from .github/prompts/
+   * Load any prompt file by name from extension's docs/prompts/
    */
   async loadPrompt(promptFileName: string): Promise<string> {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error('No workspace folder open');
-    }
-
-    // Load prompt from docs/prompts
+    // Load prompt from extension's docs/prompts
     const promptsPath = 'docs/prompts';
-    const promptUri = vscode.Uri.joinPath(workspaceFolder.uri, promptsPath, promptFileName);
+    const promptUri = vscode.Uri.joinPath(this.extensionUri, promptsPath, promptFileName);
 
     try {
       const fileContent = await vscode.workspace.fs.readFile(promptUri);
