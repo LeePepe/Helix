@@ -4,6 +4,7 @@ import { GenCodeHandler } from './commandHandlers/genCodeHandler';
 import { DesignSystemService } from '../services/designSystemService';
 import { FigmaService } from '../services/figmaService';
 import { PromptService } from '../services/promptService';
+import { FileService } from '../services/fileService';
 
 export class HelixParticipant {
   private fitFinishHandler: FitFinishHandler;
@@ -11,11 +12,13 @@ export class HelixParticipant {
   private designSystemService: DesignSystemService;
   private figmaService: FigmaService;
   private promptService: PromptService;
+  private fileService: FileService;
 
   constructor(private context: vscode.ExtensionContext) {
     this.promptService = new PromptService();
     this.designSystemService = new DesignSystemService(this.promptService);
     this.figmaService = new FigmaService();
+    this.fileService = new FileService();
 
     // Inject services into handlers
     this.fitFinishHandler = new FitFinishHandler(
@@ -64,45 +67,13 @@ export class HelixParticipant {
   private async showHelp(stream: vscode.ChatResponseStream): Promise<void> {
     // Check Figma MCP availability
     const figmaStatus = this.figmaService.checkToolsAvailable();
-
-    stream.markdown(`
-# Helix Design Workflows
-
-I can help you with Figma design-to-code workflows:
-
-## Available Commands
-
-### /fit-finish
-Compare Figma design with code implementation and identify differences.
-
-**Usage**: \`@helix /fit-finish [figma-url] <code-file-path>\`
-
-**Examples**:
-\`\`\`
-# With Figma URL:
-@helix /fit-finish https://figma.com/file/ABC?node-id=123:456 src/Button.swift
-
-# With Desktop selection (no URL needed):
-@helix /fit-finish src/Button.swift
-\`\`\`
-
-### /gen-code
-Generate production-ready code from Figma design.
-
-**Usage**: \`@helix /gen-code [figma-url]\`
-
-**Examples**:
-\`\`\`
-# With Figma URL:
-@helix /gen-code https://figma.com/file/ABC?node-id=789:012
-
-# With Desktop selection (no URL needed):
-@helix /gen-code
-\`\`\`
-
-## Prerequisites
-
-`);
+    // Load help content from docs
+    try {
+      const helpMarkdown = await this.fileService.readFile('docs/readme/helix-help.md');
+      stream.markdown(helpMarkdown);
+    } catch (e) {
+      stream.markdown(`# Helix Design Workflows\n\nHelp file not found. Expected at \`docs/readme/helix-help.md\`.\n`);
+    }
 
     // Show status of prerequisites
     stream.markdown(`### Design System Guide\n`);

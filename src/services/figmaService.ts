@@ -38,7 +38,7 @@ export class FigmaService {
 
         // Try Desktop MCP first (supports URLs)
         const desktopTool = tools.find(tool =>
-          tool.name === 'mcp__figma-desktop__get_design_context'
+          tool.name === 'mcp_figma-desktop_get_design_context'
         );
 
         if (desktopTool) {
@@ -66,7 +66,7 @@ export class FigmaService {
 
         if (remoteFigmaEnabled) {
           const remoteTool = tools.find(tool =>
-            tool.name === 'mcp__figma__get_design_context'
+            tool.name === 'mcp_figma_get_design_context'
           );
 
           if (remoteTool) {
@@ -100,8 +100,9 @@ export class FigmaService {
 
       // No URL provided - use Desktop selection
       const desktopTool = tools.find(tool =>
-        tool.name === 'mcp__figma-desktop__get_design_context'
+        tool.name === 'mcp_figma-desktop_get_design_context'
       );
+      console.log(desktopTool);
 
       if (!desktopTool) {
         throw new Error(
@@ -252,7 +253,7 @@ export class FigmaService {
       // If fileKey provided, check if remote is enabled and try remote tool
       if (fileKey && this.configService.isRemoteFigmaEnabled()) {
         const remoteTool = tools.find(tool =>
-          tool.name === 'mcp__figma__get_variable_defs'
+          tool.name === 'mcp_figma_get_variable_defs'
         );
 
         if (remoteTool) {
@@ -270,7 +271,7 @@ export class FigmaService {
 
       // Fall back to Desktop tool (no fileKey needed - uses current selection)
       const desktopTool = tools.find(tool =>
-        tool.name === 'mcp__figma-desktop__get_variable_defs'
+        tool.name === 'mcp_figma-desktop_get_variable_defs'
       );
 
       if (!desktopTool) {
@@ -338,11 +339,11 @@ export class FigmaService {
     const tools = vscode.lm.tools;
 
     const desktopTools = tools.filter(tool =>
-      tool.name.startsWith('mcp__figma-desktop__')
+      tool.name.startsWith('mcp_figma-desktop_')
     );
 
     const remoteTools = tools.filter(tool =>
-      tool.name.startsWith('mcp__figma__') && !tool.name.includes('desktop')
+      tool.name.startsWith('mcp_figma_') && !tool.name.includes('desktop')
     );
 
     const allFigmaTools = [...desktopTools, ...remoteTools];

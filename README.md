@@ -60,7 +60,7 @@ Compare a Figma design with your code:
 **Output**:
 - Match rate percentage
 - List of critical and minor differences
-- Detailed markdown report saved to `.github/ui-fit-finish/reports/`
+- Detailed markdown report saved to `.github/helix/reports/`
 - Actionable fix recommendations
 
 ### Gen-Code Command
@@ -106,8 +106,7 @@ Configure the extension in VSCode settings:
 ```
 .github/
 ├── design-system-guide.md      # Your design system reference
-├── prompts/                     # GitHub Copilot prompts (legacy)
-└── ui-fit-finish/
+└── helix/
     ├── tasks/                   # Workflow guides
     ├── reports/                 # Generated comparison reports
     └── initialization/          # Setup guides
@@ -176,6 +175,6 @@ MIT
 
 ## Related Documentation
 
-- [Fit-Finish Workflow Guide](.github/ui-fit-finish/tasks/fit-finish/GUIDE.md)
-- [Gen-Code Workflow Guide](.github/ui-fit-finish/tasks/gen-code/GUIDE.md)
-- [Prerequisites](.github/ui-fit-finish/PREREQUISITES.md)
+- [Fit-Finish Workflow Guide](docs/tasks/fit-finish.md)
+- [Gen-Code Workflow Guide](docs/tasks/gen-code.md)
+- [Prerequisites](docs/initialization/PREREQUISITES.md)

@@ -3,6 +3,7 @@ import { DesignSystemService } from '../../services/designSystemService';
 import { FigmaService } from '../../services/figmaService';
 import { FileService } from '../../services/fileService';
 import { PromptService } from '../../services/promptService';
+import { ConfigService } from '../../services/configService';
 
 export interface GeneratedCode {
   code: string;
@@ -22,6 +23,7 @@ export interface GeneratedCode {
 
 export class GenCodeHandler {
   private fileService: FileService;
+  private configService: ConfigService;
 
   constructor(
     private designSystemService: DesignSystemService,
@@ -29,6 +31,7 @@ export class GenCodeHandler {
     private promptService: PromptService
   ) {
     this.fileService = new FileService();
+    this.configService = new ConfigService();
   }
 
   async handle(
@@ -44,10 +47,11 @@ export class GenCodeHandler {
 
     stream.markdown(`\n## Generate Code from Figma\n\n`);
     if (figmaUrl) {
-      stream.markdown(`- **Source**: ${figmaUrl}\n\n`);
+      stream.markdown(`- **Source**: ${figmaUrl}\n`);
     } else {
-      stream.markdown(`- **Source**: Figma Desktop selection\n\n`);
+      stream.markdown(`- **Source**: Figma Desktop selection\n`);
     }
+    stream.markdown(`- **User Input**: ${request.prompt}\n\n`);
 
     try {
       // Step 1: Fetch Figma design specs (from URL or Desktop selection)
@@ -58,6 +62,7 @@ export class GenCodeHandler {
       stream.progress('Generating production-ready code...');
       const generatedCode = await this.generateCode(
         figmaSpec,
+        request.prompt,
         stream,
         token
       );
@@ -110,6 +115,7 @@ export class GenCodeHandler {
 
   private async generateCode(
     figmaSpec: any,
+    userInput: string,
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken
   ): Promise<GeneratedCode> {
@@ -127,12 +133,14 @@ export class GenCodeHandler {
     const systemPrompt = this.promptService.composePrompt(
       basePrompt,
       designSystemGuide,
-      figmaSpec
+      figmaSpec,
+      { userInput }
     );
 
+    const modelFamily = this.configService.getModelFamily();
     const models = await vscode.lm.selectChatModels({
       vendor: 'copilot',
-      family: 'gpt-4'
+      family: modelFamily
     });
 
     if (models.length === 0) {

@@ -3,7 +3,7 @@
   "displayName": "Helix: Design-to-Code Workflows",
   "description": "Chat participant for comparing Figma designs with code and generating production-ready implementations",
   "version": "0.1.0",
-  "publisher": "your-publisher-name",
+  "publisher": "tianpli",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -57,25 +57,20 @@
           "default": ".github/design-system-guide.md",
           "description": "Path to design system guide (relative to workspace root)"
         },
-        "helix.promptsPath": {
-          "type": "string",
-          "default": ".github/prompts",
-          "description": "Path to prompt files directory (relative to workspace root)"
-        },
-        "helix.guidesPath": {
-          "type": "string",
-          "default": ".github/ui-fit-finish/tasks",
-          "description": "Path to task guide files directory (relative to workspace root)"
-        },
         "helix.reportsPath": {
           "type": "string",
-          "default": ".github/ui-fit-finish/reports",
+          "default": ".github/helix/reports",
           "description": "Path for saving comparison reports"
         },
         "helix.enableRemoteFigma": {
           "type": "boolean",
           "default": false,
           "description": "Enable remote Figma MCP for URL-based access (disabled by default)"
+        },
+        "helix.modelFamily": {
+          "type": "string",
+          "default": "claude-sonnet-4.5",
+          "description": "Language model family to use for AI tasks (e.g., claude-sonnet-4.5, gpt-4, gpt-3.5-turbo)"
         }
       }
     }

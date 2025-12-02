@@ -21,7 +21,8 @@ export class PromptService {
       throw new Error('No workspace folder open');
     }
 
-    const guidesPath = this.configService.getGuidesPath();
+    // Load task prompt from docs/tasks
+    const guidesPath = 'docs/tasks';
     const promptFile = `${taskName}.md`;
     const promptUri = vscode.Uri.joinPath(workspaceFolder.uri, guidesPath, promptFile);
 
@@ -45,7 +46,8 @@ export class PromptService {
       throw new Error('No workspace folder open');
     }
 
-    const promptsPath = this.configService.getPromptsPath();
+    // Load prompt from docs/prompts
+    const promptsPath = 'docs/prompts';
     const promptUri = vscode.Uri.joinPath(workspaceFolder.uri, promptsPath, promptFileName);
 
     try {

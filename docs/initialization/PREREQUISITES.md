@@ -10,25 +10,25 @@ All design tasks (Fit & Finish, GenCode, QA Reports) require these prerequisites
 
 ### Figma Desktop MCP (Local)
 
-- **Tools**: `mcp__figma-desktop__*`
-  - `mcp__figma-desktop__get_design_context`
-  - `mcp__figma-desktop__get_variable_defs`
-  - `mcp__figma-desktop__get_screenshot`
-  - `mcp__figma-desktop__get_code_connect_map`
+- **Tools**: `mcp_figma-desktop_*`
+  - `mcp_figma-desktop_get_design_context`
+  - `mcp_figma-desktop_get_variable_defs`
+  - `mcp_figma-desktop_get_screenshot`
+  - `mcp_figma-desktop_get_code_connect_map`
 - **Requirements**: Figma Desktop app must be running with MCP server enabled
 - **Use Case**: Real-time access to currently selected designs in Figma Desktop
 
 ### Figma Remote MCP
 
-- **Tools**: `mcp__figma__*`
-  - `mcp__figma__get_design_context`
-  - `mcp__figma__get_variable_defs`
-  - `mcp__figma__get_screenshot`
-  - `mcp__figma__get_code_connect_map`
+- **Tools**: `mcp_figma_*`
+  - `mcp_figma_get_design_context`
+  - `mcp_figma_get_variable_defs`
+  - `mcp_figma_get_screenshot`
+  - `mcp_figma_get_code_connect_map`
 - **Requirements**: OAuth authentication with Figma account
 - **Use Case**: Access any Figma file via URL without requiring desktop app
 
-**Check**: Look for either `mcp__figma-desktop__*` or `mcp__figma__*` tools in available tools list
+**Check**: Look for either `mcp_figma-desktop_*` or `mcp_figma_*` tools in available tools list
 
 **If Not Available**:
 
@@ -51,7 +51,7 @@ All design tasks (Fit & Finish, GenCode, QA Reports) require these prerequisites
 
 **If Missing**:
 
-- Use Figma MCP tool to generate: `mcp__figma__create_design_system_rules` or `mcp__figma-desktop__create_design_system_rules`
+- Use Figma MCP tool to generate: `mcp_figma_create_design_system_rules` or `mcp_figma-desktop_create_design_system_rules`
 - Reference template: [context/design-system-rules-prompt.md](context/design-system-rules-prompt.md)
 - Follow the universal prompt template to analyze codebase
 
