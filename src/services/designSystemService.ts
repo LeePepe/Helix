@@ -1,22 +1,24 @@
 import * as vscode from 'vscode';
 import { PromptService } from './promptService';
 import { ConfigService } from './configService';
+import { ChatService } from './chatService';
 
 export class DesignSystemService {
-  private designSystemContent: string | null = null;
   private designSystemPath: string | null = null;
   private promptService: PromptService;
   private configService: ConfigService;
+  private chatService: ChatService;
 
-  constructor(promptService: PromptService, configService: ConfigService) {
+  constructor(promptService: PromptService, configService: ConfigService, chatService: ChatService) {
     this.promptService = promptService;
     this.configService = configService;
+    this.chatService = chatService;
   }
 
   /**
-   * Load the design system guide from the workspace
+   * Load the design system guide content from file
    */
-  async loadDesignSystem(): Promise<void> {
+  async loadGuideContent(): Promise<string> {
     const config = vscode.workspace.getConfiguration('helix');
     const configPath = config.get<string>('designSystemPath', '.github/design-system-guide.md');
 
@@ -30,8 +32,8 @@ export class DesignSystemService {
 
     try {
       const fileContent = await vscode.workspace.fs.readFile(designSystemUri);
-      this.designSystemContent = Buffer.from(fileContent).toString('utf8');
       console.log(`Design system guide loaded from: ${this.designSystemPath}`);
+      return Buffer.from(fileContent).toString('utf8');
     } catch (error) {
       throw new Error(
         `Failed to load design system guide at "${configPath}". ` +
@@ -53,6 +55,7 @@ export class DesignSystemService {
     }
 
     const designSystemUri = vscode.Uri.joinPath(workspaceFolder.uri, configPath);
+    this.designSystemPath = designSystemUri.fsPath;
 
     try {
       await vscode.workspace.fs.stat(designSystemUri);
@@ -63,16 +66,12 @@ export class DesignSystemService {
   }
 
   /**
-   * Load design system guide or initialize if it doesn't exist
-   * Semi-automatic: analyze codebase, show summary, request approval
+   * Ensure design system guide exists, initialize if it doesn't
    */
-  async loadOrInitialize(stream: vscode.ChatResponseStream): Promise<void> {
+  async ensureInitialized(stream: vscode.ChatResponseStream, request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<void> {
     const exists = await this.checkDesignSystemExists();
 
     if (exists) {
-      // Load existing guide
-      stream.markdown('🎨 Loading design system guide...\n\n');
-      await this.loadDesignSystem();
       return;
     }
 
@@ -88,112 +87,25 @@ export class DesignSystemService {
     stream.markdown(`- Localization approach\n`);
     stream.markdown(`- Coding conventions\n\n`);
 
-    stream.progress('Analyzing codebase...');
-
-    // Analyze codebase
-    const analysis = await this.analyzeCodebase();
-
-    // Show analysis summary
-    stream.markdown(`### Analysis Results\n\n`);
-    stream.markdown(`**Detected Platform**: ${analysis.platform}\n`);
-    stream.markdown(`**Programming Language**: ${analysis.language}\n`);
-    stream.markdown(`**Color Tokens Found**: ${analysis.colorTokens.length}\n`);
-    stream.markdown(`**Typography Patterns**: ${analysis.typographyPatterns.length}\n`);
-    stream.markdown(`**Component Files**: ${analysis.componentFiles.length}\n`);
-    stream.markdown(`**Localization Format**: ${analysis.localizationFormat}\n\n`);
+    stream.progress('Generating design system guide...');
 
     // Generate design system guide
-    stream.progress('Generating design system guide...');
-    const guideContent = await this.generateDesignSystemGuide(analysis);
-
-    // Save the guide
-    await this.saveDesignSystem(guideContent);
-
-    // Load into memory
-    this.designSystemContent = guideContent;
+    await this.generateDesignSystemGuide(request, stream, token);
 
     stream.markdown(`✅ **Design System Guide Created**\n\n`);
     stream.markdown(`Saved to: \`${this.designSystemPath}\`\n\n`);
   }
 
   /**
-   * Analyze the codebase to detect design system patterns
-   */
-  private async analyzeCodebase(): Promise<CodebaseAnalysis> {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error('No workspace folder open');
-    }
-
-    // Use VSCode's language model to analyze the codebase
-    const models = await vscode.lm.selectChatModels({
-      vendor: 'copilot',
-      family: this.configService.getModelFamily()
-    });
-
-    if (models.length === 0) {
-      throw new Error('No language model available for codebase analysis');
-    }
-
-    // Load analysis prompt from external file
-    const analysisPrompt = await this.promptService.loadPrompt('analyze-codebase.prompt.md');
-
-    const messages = [vscode.LanguageModelChatMessage.User(analysisPrompt)];
-    const response = await models[0].sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-    let fullResponse = '';
-    for await (const fragment of response.text) {
-      fullResponse += fragment;
-    }
-
-    // Parse JSON response
-    const jsonMatch = fullResponse.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-
-    // Fallback defaults if analysis fails
-    return {
-      platform: 'Unknown',
-      language: 'Unknown',
-      colorTokens: [],
-      typographyPatterns: [],
-      componentFiles: [],
-      localizationFormat: 'Unknown'
-    };
-  }
-
-  /**
    * Generate a design system guide from codebase analysis
    */
-  private async generateDesignSystemGuide(analysis: CodebaseAnalysis): Promise<string> {
-    const models = await vscode.lm.selectChatModels({
-      vendor: 'copilot',
-      family: this.configService.getModelFamily()
-    });
-
-    if (models.length === 0) {
-      throw new Error('No language model available for guide generation');
-    }
-
+  private async generateDesignSystemGuide(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<string> {
     // Load generation prompt from external file
-    let generationPrompt = await this.promptService.loadPrompt('generate-design-guide.prompt.md');
+    const promptFileContent = await this.promptService.loadInitializationPrompt('design-system-rules-prompt.md');
 
-    // Replace placeholder with actual analysis JSON
-    generationPrompt = generationPrompt.replace(
-      '{{ANALYSIS_JSON}}',
-      JSON.stringify(analysis, null, 2)
-    );
-
-    const messages = [vscode.LanguageModelChatMessage.User(generationPrompt)];
-    const response = await models[0].sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-
-    let fullResponse = '';
-    for await (const fragment of response.text) {
-      fullResponse += fragment;
-    }
-
-    return fullResponse;
+    const messages = [vscode.LanguageModelChatMessage.User(promptFileContent)];
+    
+    return await this.chatService.sendRequest(messages, { request, stream, token });
   }
 
   /**
@@ -226,22 +138,6 @@ export class DesignSystemService {
     console.log(`Design system guide saved to: ${this.designSystemPath}`);
   }
 
-  /**
-   * Get the loaded design system content
-   */
-  getGuideContent(): string {
-    if (!this.designSystemContent) {
-      throw new Error('Design system guide not loaded. Call loadDesignSystem() first.');
-    }
-    return this.designSystemContent;
-  }
-
-  /**
-   * Check if the design system is loaded
-   */
-  isLoaded(): boolean {
-    return this.designSystemContent !== null;
-  }
 
   /**
    * Get the path to the design system guide
@@ -251,14 +147,3 @@ export class DesignSystemService {
   }
 }
 
-/**
- * Codebase analysis result
- */
-interface CodebaseAnalysis {
-  platform: string;
-  language: string;
-  colorTokens: string[];
-  typographyPatterns: string[];
-  componentFiles: string[];
-  localizationFormat: string;
-}

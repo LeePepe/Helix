@@ -53,6 +53,24 @@ export class PromptService {
     }
   }
 
+  /**
+   * Load an initialization prompt from extension's docs/initialization/
+   */
+  async loadInitializationPrompt(promptFileName: string): Promise<string> {
+    const promptsPath = 'docs/initialization';
+    const promptUri = vscode.Uri.joinPath(this.extensionUri, promptsPath, promptFileName);
+
+    try {
+      const fileContent = await vscode.workspace.fs.readFile(promptUri);
+      return Buffer.from(fileContent).toString('utf8');
+    } catch (error) {
+      throw new Error(
+        `Failed to load initialization prompt: ${promptsPath}/${promptFileName}. ` +
+        `Error: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
 
   /**
    * Compose the final prompt by concatenating all parts

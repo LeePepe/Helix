@@ -5,6 +5,7 @@ import { FigmaService } from '../services/figmaService';
 import { PromptService } from '../services/promptService';
 import { FileService } from '../services/fileService';
 import { ConfigService } from '../services/configService';
+import { ChatService } from '../services/chatService';
 
 export class HelixParticipant {
   private taskHandler: TaskHandler;
@@ -13,11 +14,13 @@ export class HelixParticipant {
   private promptService: PromptService;
   private fileService: FileService;
   private configService: ConfigService;
+  private chatService: ChatService;
 
   constructor(private context: vscode.ExtensionContext) {
     this.promptService = new PromptService(context.extensionUri);
     this.configService = new ConfigService();
-    this.designSystemService = new DesignSystemService(this.promptService, this.configService);
+    this.chatService = new ChatService(this.configService);
+    this.designSystemService = new DesignSystemService(this.promptService, this.configService, this.chatService);
     this.figmaService = new FigmaService();
     this.fileService = new FileService();
 
@@ -36,11 +39,11 @@ export class HelixParticipant {
     token: vscode.CancellationToken
   ): Promise<void> {
     try {
-      // Load design system guide once (or initialize if doesn't exist)
-      if (!this.designSystemService.isLoaded()) {
-        stream.progress('Loading design system guide...');
-        await this.designSystemService.loadOrInitialize(stream);
-      }
+      // Check if project is already initialized
+      const isInitialized = await this.designSystemService.checkDesignSystemExists();
+
+      // Ensure design system guide exists
+      await this.designSystemService.ensureInitialized(stream, request, token);
 
       // Route based on slash command
       switch (request.command) {
@@ -51,8 +54,10 @@ export class HelixParticipant {
           await this.taskHandler.handle('gen-code', request, context, stream, token);
           break;
         default:
-          // No command specified - show help
-          await this.showHelp(stream);
+          // No command specified - show help only if project was already initialized
+          if (isInitialized) {
+            await this.showHelp(stream);
+          }
       }
     } catch (error) {
       stream.markdown(`\n\n❌ **Error**: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -75,7 +80,7 @@ export class HelixParticipant {
 
     // Show status of prerequisites
     stream.markdown(`### Design System Guide\n`);
-    if (this.designSystemService.isLoaded()) {
+    if (await this.designSystemService.checkDesignSystemExists()) {
       stream.markdown(`✅ Loaded from: \`${this.designSystemService.getGuidePath()}\`\n\n`);
     } else {
       stream.markdown(`❌ Not loaded. Configure path in settings: \`helix.designSystemPath\`\n\n`);

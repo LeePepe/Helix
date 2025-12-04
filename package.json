@@ -1,8 +1,8 @@
 {
   "name": "helix-design-workflows",
-  "displayName": "Helix: Design-to-Code Workflows",
+  "displayName": "Helix: Figma Code Connector",
   "description": "Chat participant for comparing Figma designs with code and generating production-ready implementations",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "tianpli",
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
     "chat",
     "mcp",
     "ai",
+    "code-generation",
     "design-system"
   ],
   "activationEvents": [

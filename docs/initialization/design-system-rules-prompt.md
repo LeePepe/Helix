@@ -13,83 +13,21 @@ Copy and use the following prompt to analyze any codebase and generate a compreh
 ### Prompt
 
 ```text
-Please analyze this codebase thoroughly and provide a comprehensive rules document (e.g., CLAUDE.md, .cursor/rules/design_system_rules.mdc, or design-system-guide.md) on the following aspects to help integrate Figma designs using the Model Context Protocol:
+Please generate a comprehensive `design-system-guide.md` for this project by combining Figma design rules with codebase analysis.
 
-## 1. Token Definitions
+First, call the `mcp_figma-desktop_create_design_system_rules` tool (or `mcp_figma_create_design_system_rules`) to retrieve the prompt that generate a design system rules from Figma.
 
-### Colors
-- Where are color tokens defined? (file paths)
-- What format/structure is used? (CSS variables, JSON, code constants, etc.)
-- Is there a color hierarchy or naming convention?
-- How are theme colors organized? (semantic vs primitive)
-- Are there component-specific color tokens?
-- How are interaction states handled? (hover, pressed, disabled, focus)
-- Is dark mode supported? How?
+Then, analyze this codebase thoroughly to understand the implementation details.
 
-### Typography
-- Where are typography tokens defined?
-- What properties are included? (size, weight, line-height, letter-spacing)
-- Is there a type scale? Document the hierarchy.
-- What font families are used?
-- How do Figma text style names map to code tokens?
+In addition to the analysis requested by the Figma tool, please specifically analyze:
 
-### Spacing
-- Where are spacing tokens defined?
-- What is the spacing scale? (e.g., 4pt grid, 8pt grid)
-- Are there named spacing constants?
-
-### Other Tokens
-- Corner radius / border radius values
-- Shadow / elevation definitions
-- Border / stroke definitions
-- Animation / motion tokens
-- Breakpoints (if responsive)
-
-## 2. Component Library
-
-- Where are UI components defined? (directory structure)
-- What component architecture is used? (atomic design, compound components, etc.)
-- List the available pre-built components with their file paths
-- What are the component variants and their APIs?
-- Are there component documentation or storybooks?
-
-## 3. Frameworks & Libraries
-
-- What UI framework is used? (React, Vue, SwiftUI, Flutter, etc.)
-- What styling approach? (CSS-in-JS, CSS Modules, Tailwind, native styling, etc.)
-- What build system and bundler?
-- What state management?
-- What testing frameworks?
-
-## 4. Asset Management
-
-- How are assets (images, videos) stored and referenced?
-- What asset optimization techniques are used?
-- Are there CDN configurations?
-
-## 5. Icon System
-
-- Where are icons stored?
-- What icon library is used? (if any)
-- How are icons imported and used in components?
-- What is the icon naming convention?
-- What sizes and variants are available?
-
-## 6. Styling Approach
-
-- What CSS methodology is used?
-- Are there global styles?
-- How are responsive designs implemented?
-- How are shadows/elevations applied?
-- How are animations handled?
-
-## 7. Localization
+## 1. Localization
 
 - How are strings localized?
 - What is the localization file format?
 - What is the pattern for defining and using localized strings?
 
-## 8. Accessibility
+## 2. Accessibility
 
 - What accessibility standards are followed?
 - What are the contrast requirements?
@@ -97,18 +35,12 @@ Please analyze this codebase thoroughly and provide a comprehensive rules docume
 - How is keyboard navigation handled?
 - How is screen reader support implemented?
 
-## 9. Project Structure
-
-- What is the overall organization of the codebase?
-- Are there specific patterns for feature organization?
-- Where should new components be added?
-
 ## Output Format
 
-Please provide your analysis as structured markdown with:
+Please provide the final `design-system-guide.md` content as structured markdown. It must integrate the Figma rules with the codebase patterns:
 
 1. **Quick Reference** - A summary table of the most important tokens and their usage
-2. **Token Mapping Tables** - Figma token name → Code token mapping
+2. **Token Mapping Tables** - Explicit mapping between Figma token names (from tool output) and Code token names (from analysis)
 3. **Code Examples** - Real code snippets demonstrating usage patterns
 4. **File Paths** - Exact paths to relevant files
 5. **Implementation Checklist** - Steps to follow when implementing a Figma design
