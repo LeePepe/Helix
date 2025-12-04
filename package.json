@@ -1,9 +1,10 @@
 {
   "name": "helix-design-workflows",
-  "displayName": "Helix: Figma Code Connector",
+  "displayName": "Helix: Design to Code",
   "description": "Chat participant for comparing Figma designs with code and generating production-ready implementations",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "tianpli",
+  "icon": "resources/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/tianpli_microsoft/Helix.git"
@@ -52,6 +53,10 @@
       {
         "command": "helix.openDesignSystemGuide",
         "title": "Helix: Open Design System Guide"
+      },
+      {
+        "command": "helix.installMcpServer",
+        "title": "Helix: Install Figma MCP Server"
       }
     ],
     "configuration": {

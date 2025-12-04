@@ -39,6 +39,11 @@ export class HelixParticipant {
     token: vscode.CancellationToken
   ): Promise<void> {
     try {
+
+      // Check MCP Status
+      stream.progress('Validating Figma MCP status...');
+      this.figmaService.validateMcpStatus(stream);
+
       // Check if project is already initialized
       const isInitialized = await this.designSystemService.checkDesignSystemExists();
 

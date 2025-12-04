@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as http from 'http';
 import { ConfigService } from './configService';
 
 export interface FigmaUrlParts {
@@ -143,6 +144,32 @@ export class FigmaService {
   }
 
   /**
+   * Check if local Figma MCP server is running
+   */
+  private async isLocalServerRunning(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const req = http.request('http://127.0.0.1:3845/mcp', {
+        method: 'HEAD',
+        timeout: 500
+      }, (res) => {
+        // Any response means the server is up
+        resolve(true);
+      });
+
+      req.on('error', () => {
+        resolve(false);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+
+      req.end();
+    });
+  }
+
+  /**
    * Install Figma MCP servers by creating or updating .vscode/mcp.json
    * Installs both Desktop and Remote Figma MCP servers
    */
@@ -212,23 +239,35 @@ export class FigmaService {
       // Write configuration
       fs.writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), 'utf8');
 
+      // Check if server is running to give better feedback
+      const isRunning = await this.isLocalServerRunning();
+      const toolsStatus = this.checkToolsAvailable();
+
       // Show success notification with next steps
       const remoteFigmaEnabled = this.configService.isRemoteFigmaEnabled();
-      const message = remoteFigmaEnabled
-        ? `✅ Figma MCP servers configured!\n\nYou can now use:\n1. **Desktop selection** (no URL needed) - Open Figma Desktop and enable MCP (Shift+D)\n2. **URL-based access** - Provide Figma URLs directly in commands\n\nRestart VS Code to load the servers.`
-        : `✅ Figma Desktop MCP configured!\n\nYou can now use Desktop selection (no URL needed).\n\nNext steps:\n1. Restart VS Code to load MCP server\n2. Open Figma Desktop app\n3. Enable MCP in Figma (Shift+D → Enable MCP)\n\nNote: Remote Figma (URL-based) is disabled. Enable it in settings if needed.`;
+      let message = remoteFigmaEnabled
+        ? `✅ Figma MCP servers configured!\n\nYou can now use:\n1. **Desktop selection** (no URL needed) - Open Figma Desktop and enable MCP (Shift+D)\n2. **URL-based access** - Provide Figma URLs directly in commands`
+        : `✅ Figma Desktop MCP configured!\n\nYou can now use Desktop selection (no URL needed).`;
 
-      vscode.window.showInformationMessage(
+      if (!toolsStatus.available) {
+        message += `\n\n**Action Required:** Restart VS Code to load the new MCP servers.`;
+      }
+
+      if (!isRunning) {
+        message += `\n\n⚠️ **Note:** Figma Desktop does not seem to be running or MCP is not enabled. Please open Figma and enable MCP (Shift+D).`;
+      }
+
+      const selection = await vscode.window.showInformationMessage(
         'Figma MCP configured!',
         'View Instructions'
-      ).then(selection => {
-        if (selection === 'View Instructions') {
-          const instructionsPath = path.join(workspaceRoot, 'docs/initialization/figma-mcp-install.md');
-          if (fs.existsSync(instructionsPath)) {
-            vscode.commands.executeCommand('vscode.open', vscode.Uri.file(instructionsPath));
-          }
+      );
+
+      if (selection === 'View Instructions') {
+        const instructionsPath = path.join(workspaceRoot, 'docs/initialization/figma-mcp-install.md');
+        if (fs.existsSync(instructionsPath)) {
+          vscode.commands.executeCommand('vscode.open', vscode.Uri.file(instructionsPath));
         }
-      });
+      }
 
       return {
         success: true,
@@ -333,6 +372,77 @@ export class FigmaService {
       return JSON.parse(content);
     } catch {
       return content;
+    }
+  }
+
+  /**
+   * Check if MCP configuration file exists
+   */
+  checkMcpConfigExists(): boolean {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      return false;
+    }
+
+    const workspaceRoot = workspaceFolder.uri.fsPath;
+    const mcpJsonPath = path.join(workspaceRoot, '.vscode', 'mcp.json');
+    const altMcpJsonPath = path.join(workspaceRoot, '.mcp.json');
+
+    return fs.existsSync(mcpJsonPath) || fs.existsSync(altMcpJsonPath);
+  }
+
+  /**
+   * Validate MCP status
+   * Throws error if MCP is not configured or server is not running
+   */
+  async validateMcpStatus(stream?: vscode.ChatResponseStream): Promise<void> {
+    if (!this.checkMcpConfigExists()) {
+      if (stream) {
+        stream.markdown('❌ **Figma MCP not configured**\n\n');
+        stream.markdown('Figma MCP servers are required to fetch designs.\n');
+        stream.button({
+            command: 'helix.installMcpServer',
+            title: 'Install Figma MCP Config'
+        });
+        // We throw a special error to stop execution but not show another error message
+        throw new Error('Figma MCP not configured');
+      }
+      
+      throw new Error(
+        '❌ **Figma MCP not configured**\n\n' +
+        'Please configure Figma MCP servers in `.vscode/mcp.json`.'
+      );
+    }
+
+    const status = this.checkToolsAvailable();
+    if (!status.available) {
+      // Config exists, but tools not found.
+      // Check if server is running
+      const isRunning = await this.isLocalServerRunning();
+      
+      if (stream) {
+         if (!isRunning) {
+            stream.markdown('❌ **Figma Desktop not detected**\n\n');
+            stream.markdown('The MCP server is configured, but Figma Desktop seems to be closed or MCP is disabled.\n');
+            stream.markdown('1. Open Figma Desktop\n');
+            stream.markdown('2. Enable Dev Mode (Shift+D)\n');
+            stream.markdown('3. Enable MCP in Dev Mode settings\n');
+            stream.button({
+              command: 'helix.openFigma',
+              title: 'Open Figma Desktop'
+            });
+         } else {
+            stream.markdown('❌ **Figma MCP tools not loaded**\n\n');
+            stream.markdown('The server appears to be running, but VS Code hasn\'t loaded the tools yet.\n');
+            stream.markdown('Please **Restart VS Code** to reload the MCP configuration.\n');
+         }
+      }
+
+      throw new Error(
+        '❌ **Figma MCP server not running**\n\n' +
+        'Configuration found but tools are not available.\n' +
+        'Please ensure the MCP server is running and restart VS Code.'
+      );
     }
   }
 

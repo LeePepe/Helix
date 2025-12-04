@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { HelixParticipant } from './participants/helixParticipant';
+import { FigmaService } from './services/figmaService';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Helix Design Workflows extension is activating...');
@@ -29,6 +30,24 @@ export function activate(context: vscode.ExtensionContext) {
       } else {
         vscode.window.showErrorMessage('No workspace folder open');
       }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('helix.installMcpServer', async () => {
+      const figmaService = new FigmaService();
+      const result = await figmaService.installMcpServers();
+      if (result.success) {
+        vscode.window.showInformationMessage(result.message);
+      } else {
+        vscode.window.showErrorMessage(result.message);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('helix.openFigma', () => {
+      vscode.env.openExternal(vscode.Uri.parse('figma://'));
     })
   );
 
