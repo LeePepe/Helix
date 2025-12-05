@@ -87,9 +87,14 @@ export class TaskHandler {
             const systemPrompt = this.buildSystemPrompt(taskPrompt, designSystemGuide);
 
             // Build initial messages
+            // Merge system prompt and user prompt to avoid sending multiple User messages
+            // which can cause 400 Bad Request errors with some providers
+            const fullPrompt = request.prompt 
+                ? `${systemPrompt}\n\nUser Request:\n${request.prompt}`
+                : systemPrompt;
+
             const messages: vscode.LanguageModelChatMessage[] = [
-                vscode.LanguageModelChatMessage.User(systemPrompt),
-                vscode.LanguageModelChatMessage.User(request.prompt)
+                vscode.LanguageModelChatMessage.User(fullPrompt)
             ];
 
             // Use ChatService to handle request with tools

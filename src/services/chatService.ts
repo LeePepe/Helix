@@ -77,11 +77,13 @@ export class ChatService {
       return responseText;
     }
 
-    const assistantMsg = vscode.LanguageModelChatMessage.Assistant('');
-    assistantMsg.content = [
-      new vscode.LanguageModelTextPart(responseText),
-      ...toolCalls
-    ];
+    const contentParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
+    if (responseText) {
+      contentParts.push(new vscode.LanguageModelTextPart(responseText));
+    }
+    contentParts.push(...toolCalls);
+
+    const assistantMsg = vscode.LanguageModelChatMessage.Assistant(contentParts);
     messages.push(assistantMsg);
     console.log(`Executing ${toolCalls.length} tool calls...`);
     console.log('Tool Calls:', toolCalls.map(tc => tc.name).join(', '));

@@ -85,7 +85,10 @@ Configure the extension in VSCode settings:
 ```json
 {
   "helix.designSystemPath": ".github/design-system-guide.md",
-  "helix.reportsPath": ".github/helix/reports"
+  "helix.reportsPath": ".github/helix/reports",
+  "helix.enableRemoteFigma": false,
+  "helix.modelFamily": "claude-sonnet-4.5",
+  "helix.tools": ["figma-desktop", "copilot_", "usages", "vscodeAPI", "problems", "changes"]
 }
 ```
 
@@ -116,12 +119,14 @@ src/
 ├── participants/
 │   ├── helixParticipant.ts     # Chat participant
 │   └── commandHandlers/
-│       ├── fitFinishHandler.ts # Fit-finish logic
-│       └── genCodeHandler.ts   # Code generation logic
+│       └── taskHandler.ts      # Unified task handler
 └── services/
+    ├── chatService.ts          # Chat interaction service
+    ├── configService.ts        # Configuration management
     ├── designSystemService.ts  # Design system loading
     ├── figmaService.ts         # Figma MCP integration
     ├── fileService.ts          # File operations
+    ├── promptService.ts        # Prompt management
     └── reportService.ts        # Report generation
 ```
 
