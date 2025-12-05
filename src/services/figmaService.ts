@@ -152,15 +152,18 @@ export class FigmaService {
         method: 'HEAD',
         timeout: 500
       }, (res) => {
+        console.log('Figma MCP server response status:', res.statusCode);
         // Any response means the server is up
         resolve(true);
       });
 
       req.on('error', () => {
+        console.warn('Figma MCP server not responding');
         resolve(false);
       });
 
       req.on('timeout', () => {
+        console.log('Figma MCP server request timed out');
         req.destroy();
         resolve(false);
       });
@@ -175,70 +178,89 @@ export class FigmaService {
    */
   async installMcpServers(): Promise<{ success: boolean; message: string }> {
     try {
-      // Get workspace root
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      if (!workspaceFolder) {
-        return {
-          success: false,
-          message: 'No workspace folder open. Please open a workspace first.'
-        };
-      }
-
-      const workspaceRoot = workspaceFolder.uri.fsPath;
-      const vscodeDir = path.join(workspaceRoot, '.vscode');
-      const mcpJsonPath = path.join(vscodeDir, 'mcp.json');
-      const altMcpJsonPath = path.join(workspaceRoot, '.mcp.json');
-
-      // MCP server configuration
-      // Desktop is always included, Remote only if enabled
-      const figmaServers: any = {
-        'figma-desktop': {
-          type: 'http',
-          url: 'http://127.0.0.1:3845/mcp'
-        }
+      const configPath = this.ensureMcpConfigExists();
+      this.addFigmaMcpConfig(configPath);
+      return await this.verifyAndNotifyMcpInstallation();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        message: `Failed to install MCP server: ${errorMessage}`
       };
+    }
+  }
 
-      // Only add remote server if enabled in settings
-      if (this.configService.isRemoteFigmaEnabled()) {
-        figmaServers['figma'] = {
-          type: 'http',
-          url: 'https://mcp.figma.com/mcp'
-        };
+  /**
+   * Ensure MCP config file exists, creating it if necessary
+   */
+  private ensureMcpConfigExists(): string {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error('No workspace folder open. Please open a workspace first.');
+    }
+
+    const workspaceRoot = workspaceFolder.uri.fsPath;
+    const vscodeDir = path.join(workspaceRoot, '.vscode');
+    const mcpJsonPath = path.join(vscodeDir, 'mcp.json');
+    const altMcpJsonPath = path.join(workspaceRoot, '.mcp.json');
+
+    // Check if either config file exists
+    if (fs.existsSync(mcpJsonPath)) return mcpJsonPath;
+    if (fs.existsSync(altMcpJsonPath)) return altMcpJsonPath;
+
+    // Create .vscode directory if it doesn't exist
+    if (!fs.existsSync(vscodeDir)) {
+      fs.mkdirSync(vscodeDir, { recursive: true });
+    }
+
+    // Create empty config
+    fs.writeFileSync(mcpJsonPath, JSON.stringify({ servers: {} }, null, 2), 'utf8');
+    return mcpJsonPath;
+  }
+
+  /**
+   * Add Figma configuration to MCP config file
+   */
+  private addFigmaMcpConfig(configPath: string): void {
+    const content = fs.readFileSync(configPath, 'utf8');
+    let existingConfig: any;
+    try {
+      existingConfig = JSON.parse(content);
+    } catch {
+      existingConfig = { servers: {} };
+    }
+
+    if (!existingConfig.servers) {
+      existingConfig.servers = {};
+    }
+
+    const figmaServers: any = {
+      'figma-desktop': {
+        type: 'http',
+        url: 'http://127.0.0.1:3845/mcp'
       }
+    };
 
-      let configPath = mcpJsonPath;
-      let existingConfig: any = { servers: {} };
-
-      // Check if either config file exists
-      if (fs.existsSync(mcpJsonPath)) {
-        configPath = mcpJsonPath;
-        const content = fs.readFileSync(mcpJsonPath, 'utf8');
-        existingConfig = JSON.parse(content);
-      } else if (fs.existsSync(altMcpJsonPath)) {
-        configPath = altMcpJsonPath;
-        const content = fs.readFileSync(altMcpJsonPath, 'utf8');
-        existingConfig = JSON.parse(content);
-      } else {
-        // Create .vscode directory if it doesn't exist
-        if (!fs.existsSync(vscodeDir)) {
-          fs.mkdirSync(vscodeDir, { recursive: true });
-        }
-      }
-
-      // Ensure servers object exists
-      if (!existingConfig.servers) {
-        existingConfig.servers = {};
-      }
-
-      // Merge Figma servers (preserve existing servers)
-      existingConfig.servers = {
-        ...existingConfig.servers,
-        ...figmaServers
+    // Only add remote server if enabled in settings
+    if (this.configService.isRemoteFigmaEnabled()) {
+      figmaServers['figma'] = {
+        type: 'http',
+        url: 'https://mcp.figma.com/mcp'
       };
+    }
 
-      // Write configuration
-      fs.writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), 'utf8');
+    existingConfig.servers = {
+      ...existingConfig.servers,
+      ...figmaServers
+    };
 
+    fs.writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), 'utf8');
+  }
+
+  /**
+   * Verify installation and notify user
+   */
+  private async verifyAndNotifyMcpInstallation(): Promise<{ success: boolean; message: string }> {
       // Check if server is running to give better feedback
       const isRunning = await this.isLocalServerRunning();
       const toolsStatus = this.checkToolsAvailable();
@@ -257,12 +279,15 @@ export class FigmaService {
         message += `\n\n⚠️ **Note:** Figma Desktop does not seem to be running or MCP is not enabled. Please open Figma and enable MCP (Shift+D).`;
       }
 
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      const workspaceRoot = workspaceFolder?.uri.fsPath;
+
       const selection = await vscode.window.showInformationMessage(
-        'Figma MCP configured!',
+        message,
         'View Instructions'
       );
 
-      if (selection === 'View Instructions') {
+      if (selection === 'View Instructions' && workspaceRoot) {
         const instructionsPath = path.join(workspaceRoot, 'docs/initialization/figma-mcp-install.md');
         if (fs.existsSync(instructionsPath)) {
           vscode.commands.executeCommand('vscode.open', vscode.Uri.file(instructionsPath));
@@ -273,14 +298,6 @@ export class FigmaService {
         success: true,
         message
       };
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return {
-        success: false,
-        message: `Failed to install MCP server: ${errorMessage}`
-      };
-    }
   }
 
   /**
@@ -378,72 +395,125 @@ export class FigmaService {
   /**
    * Check if MCP configuration file exists
    */
-  checkMcpConfigExists(): boolean {
+  private checkMcpConfigExists(): boolean {
+    return !!this.getMcpConfigPath();
+  }
+
+  /**
+   * Get path to MCP config file if it exists
+   */
+  private getMcpConfigPath(): string | null {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      return false;
-    }
+    if (!workspaceFolder) return null;
 
     const workspaceRoot = workspaceFolder.uri.fsPath;
     const mcpJsonPath = path.join(workspaceRoot, '.vscode', 'mcp.json');
     const altMcpJsonPath = path.join(workspaceRoot, '.mcp.json');
 
-    return fs.existsSync(mcpJsonPath) || fs.existsSync(altMcpJsonPath);
+    if (fs.existsSync(mcpJsonPath)) return mcpJsonPath;
+    if (fs.existsSync(altMcpJsonPath)) return altMcpJsonPath;
+    return null;
   }
 
   /**
-   * Validate MCP status
-   * Throws error if MCP is not configured or server is not running
+   * Check if MCP config contains Figma servers
+   */
+  private checkMcpConfigContent(): { valid: boolean; missing: string[] } {
+    const configPath = this.getMcpConfigPath();
+    if (!configPath) return { valid: false, missing: ['config_file'] };
+
+    try {
+      const content = fs.readFileSync(configPath, 'utf8');
+      const config = JSON.parse(content);
+      const servers = config.servers || {};
+      const missing: string[] = [];
+
+      if (!servers['figma-desktop']) {
+        missing.push('figma-desktop');
+      }
+
+      if (this.configService.isRemoteFigmaEnabled() && !servers['figma']) {
+        missing.push('figma');
+      }
+
+      return {
+        valid: missing.length === 0,
+        missing
+      };
+    } catch {
+      return { valid: false, missing: ['parse_error'] };
+    }
+  }
+
+  /**
+   * Validate MCP status with auto-recovery attempts
+   * 1. Check if tools are valid (available) -> Pass
+   * 2. Check if MCP config exists -> Create if missing
+   * 3. Check if MCP content is valid -> Update if invalid
+   * 4. Check if Figma Desktop is running -> Prompt to open
+   * 5. If all configured but tools missing -> Prompt to restart
    */
   async validateMcpStatus(stream?: vscode.ChatResponseStream): Promise<void> {
-    if (!this.checkMcpConfigExists()) {
-      if (stream) {
-        stream.markdown('❌ **Figma MCP not configured**\n\n');
-        stream.markdown('Figma MCP servers are required to fetch designs.\n');
-        stream.button({
-            command: 'helix.installMcpServer',
-            title: 'Install Figma MCP Config'
-        });
-        // We throw a special error to stop execution but not show another error message
-        throw new Error('Figma MCP not configured');
-      }
-      
-      throw new Error(
-        '❌ **Figma MCP not configured**\n\n' +
-        'Please configure Figma MCP servers in `.vscode/mcp.json`.'
-      );
-    }
-
+    // 1. Check if tools are already loaded and ready
     const status = this.checkToolsAvailable();
-    if (!status.available) {
-      // Config exists, but tools not found.
-      // Check if server is running
-      const isRunning = await this.isLocalServerRunning();
-      
-      if (stream) {
-         if (!isRunning) {
-            stream.markdown('❌ **Figma Desktop not detected**\n\n');
-            stream.markdown('The MCP server is configured, but Figma Desktop seems to be closed or MCP is disabled.\n');
-            stream.markdown('1. Open Figma Desktop\n');
-            stream.markdown('2. Enable Dev Mode (Shift+D)\n');
-            stream.markdown('3. Enable MCP in Dev Mode settings\n');
-            stream.button({
-              command: 'helix.openFigma',
-              title: 'Open Figma Desktop'
-            });
-         } else {
-            stream.markdown('❌ **Figma MCP tools not loaded**\n\n');
-            stream.markdown('The server appears to be running, but VS Code hasn\'t loaded the tools yet.\n');
-            stream.markdown('Please **Restart VS Code** to reload the MCP configuration.\n');
-         }
-      }
-
-      throw new Error(
-        '❌ **Figma MCP server not running**\n\n' +
-        'Configuration found but tools are not available.\n' +
-        'Please ensure the MCP server is running and restart VS Code.'
-      );
+    if (status.available) {
+      return; // All good!
     }
+
+    // Tools are not available, let's diagnose and try to fix
+    if (stream) {
+      stream.progress('Figma MCP tools not detected. Diagnosing...');
+    }
+
+    // 2 & 3. Check Config File and Content
+    const configExists = this.checkMcpConfigExists();
+    const contentCheck = this.checkMcpConfigContent();
+
+    if (!configExists || !contentCheck.valid) {
+      if (stream) {
+        stream.markdown('⚙️ **Configuring Figma MCP...**\n\n');
+      }
+      
+      try {
+        const configPath = this.ensureMcpConfigExists();
+        this.addFigmaMcpConfig(configPath);
+        
+        if (stream) {
+          stream.markdown('✅ Configuration updated.\n\n');
+          stream.markdown('**Action Required:** Please **Restart VS Code** to load the new MCP servers.\n');
+        }
+      } catch (error) {
+        throw new Error(`Failed to configure Figma MCP: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // 4. Config is good, but tools are missing. Check if Desktop Server is running.
+    const isRunning = await this.isLocalServerRunning();
+    
+    if (!isRunning) {
+      if (stream) {
+        stream.markdown('⚠️ **Figma Desktop not detected**\n\n');
+        stream.markdown('The MCP server is configured, but Figma Desktop seems to be closed or MCP is disabled.\n');
+        stream.markdown('1. Open Figma Desktop\n');
+        stream.markdown('2. Enable Dev Mode (Shift+D)\n');
+        stream.markdown('3. Enable MCP in Dev Mode settings\n');
+        stream.button({
+          command: 'helix.openFigma',
+          title: 'Open Figma Desktop'
+        });
+      }
+      throw new Error('Figma Desktop MCP server not running. Please open Figma and enable MCP.');
+    }
+
+    // 5. Server is running, Config is good, but Tools still missing.
+    // This usually means VS Code needs a restart to pick up the config or connection failed.
+    if (stream) {
+      stream.markdown('⚠️ **Restart Required**\n\n');
+      stream.markdown('Figma Desktop is running and configured, but VS Code hasn\'t loaded the tools yet.\n');
+      stream.markdown('Please **Restart VS Code** to establish the connection.\n');
+    }
+    
+    throw new Error('Figma MCP tools not loaded. Please restart VS Code.');
   }
 
   /**
@@ -452,7 +522,7 @@ export class FigmaService {
    */
   checkToolsAvailable(): { available: boolean; toolNames: string[]; hasDesktop: boolean; hasRemote: boolean } {
     const tools = vscode.lm.tools;
-
+    console.log('Available tools:', tools.map(t => t.name).filter(name => name.includes('figma')));
     const desktopTools = tools.filter(tool =>
       tool.name.startsWith('mcp_figma-desktop_')
     );
@@ -461,7 +531,7 @@ export class FigmaService {
       tool.name.startsWith('mcp_figma_') && !tool.name.includes('desktop')
     ) : [];
 
-    const allFigmaTools = [...desktopTools , ...remoteTools];
+    const allFigmaTools = [...desktopTools, ...remoteTools];
 
     return {
       available: allFigmaTools.length > 0,

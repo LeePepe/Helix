@@ -68,11 +68,11 @@ export class DesignSystemService {
   /**
    * Ensure design system guide exists, initialize if it doesn't
    */
-  async ensureInitialized(stream: vscode.ChatResponseStream, request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<void> {
+  async ensureInitialized(stream: vscode.ChatResponseStream, request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<boolean> {
     const exists = await this.checkDesignSystemExists();
 
     if (exists) {
-      return;
+      return true;
     }
 
     // Guide doesn't exist - start initialization
@@ -94,6 +94,7 @@ export class DesignSystemService {
 
     stream.markdown(`✅ **Design System Guide Created**\n\n`);
     stream.markdown(`Saved to: \`${this.designSystemPath}\`\n\n`);
+    return false;
   }
 
   /**

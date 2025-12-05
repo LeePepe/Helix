@@ -42,13 +42,10 @@ export class HelixParticipant {
 
       // Check MCP Status
       stream.progress('Validating Figma MCP status...');
-      this.figmaService.validateMcpStatus(stream);
-
-      // Check if project is already initialized
-      const isInitialized = await this.designSystemService.checkDesignSystemExists();
+      await this.figmaService.validateMcpStatus(stream);
 
       // Ensure design system guide exists
-      await this.designSystemService.ensureInitialized(stream, request, token);
+      let isInitialized = await this.designSystemService.ensureInitialized(stream, request, token);
 
       // Route based on slash command
       switch (request.command) {

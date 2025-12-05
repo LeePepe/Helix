@@ -37,9 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('helix.installMcpServer', async () => {
       const figmaService = new FigmaService();
       const result = await figmaService.installMcpServers();
-      if (result.success) {
-        vscode.window.showInformationMessage(result.message);
-      } else {
+      if (!result.success) {
         vscode.window.showErrorMessage(result.message);
       }
     })
