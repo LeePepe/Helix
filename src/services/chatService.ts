@@ -10,10 +10,10 @@ export class ChatService {
   async sendRequest(
     content: string | vscode.LanguageModelChatMessage[],
     options: {
-      request?: vscode.ChatRequest;
-      stream?: vscode.ChatResponseStream;
-      token?: vscode.CancellationToken;
-    } = {}
+      request: vscode.ChatRequest;
+      stream: vscode.ChatResponseStream;
+      token: vscode.CancellationToken;
+    }
   ): Promise<string> {
     const { request, stream, token } = options;
     const cancelToken = token || new vscode.CancellationTokenSource().token;
@@ -33,24 +33,7 @@ export class ChatService {
       throw new Error('No language model available. Please ensure GitHub Copilot Chat is installed and active.');
     }
 
-    // If we have a request object, we can support tools
-    if (request && stream) {
-      return await this.processRequestWithTools(models[0], messages, request, stream, cancelToken);
-    }
-
-    // Simple request without tools
-    try {
-      const response = await models[0].sendRequest(messages, {}, cancelToken);
-      
-      let fullResponse = '';
-      for await (const fragment of response.text) {
-        fullResponse += fragment;
-      }
-      
-      return fullResponse;
-    } catch (error) {
-      throw new Error(`Failed to send request to language model: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    return await this.processRequestWithTools(models[0], messages, request, stream, cancelToken);
   }
 
   private async processRequestWithTools(
@@ -100,7 +83,8 @@ export class ChatService {
       ...toolCalls
     ];
     messages.push(assistantMsg);
-
+    console.log(`Executing ${toolCalls.length} tool calls...`);
+    console.log('Tool Calls:', toolCalls.map(tc => tc.name).join(', '));
     const toolResults = await this.executeToolCalls(toolCalls, request, stream, token);
 
     const userMsg = vscode.LanguageModelChatMessage.User('');
