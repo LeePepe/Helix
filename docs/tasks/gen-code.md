@@ -205,9 +205,9 @@ Consult `.github/design-system-guide.md` for layout patterns and code examples.
 
 **For Each Typography Style**:
 
-1. Check `.github/design-system-guide.md` for typography token documentation
-2. Map to design system typography token
-3. If custom: Note non-standard font usage with recommendation to add to design system
+1. **Token Priority**: Check if the Figma design uses a named text style or variable.
+2. **Map to Token**: If a named style exists, map it to the corresponding design system typography token from `.github/design-system-guide.md`.
+3. **Fallback**: If no token is found, use raw values (font family, size, weight) but add a comment suggesting to add a new token to the design system.
 
 #### 5.3: Map Spacing
 
@@ -239,7 +239,7 @@ Create structure according to patterns in `.github/design-system-guide.md`:
 **Follow Patterns from .github/design-system-guide.md**:
 
 - Use design system color tokens
-- Use design system typography tokens
+- **Use design system typography tokens** (Prioritize tokens over raw font values)
 - Use icon library
 - Apply spacing using constants
 - Use design system components where applicable
