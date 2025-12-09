@@ -176,6 +176,8 @@ Please provide:
 - Alignment
 
 #### 4.3: Typography Properties
+
+- Font token name
 - Font family
 - Font size
 - Font weight
@@ -231,6 +233,9 @@ Status: ❌ Mismatch (lighter in Figma)
 ##### 5.2: Typography
 
 **Compare**:
+
+- **Token/Name Priority**: If a Font Token or Name is available, prioritize checking if the code uses the correct token/name.
+- **Parameter Validation**: If the token/name is correct but underlying parameters (size, weight, etc.) differ, point out the discrepancy but **do not modify** the code parameters.
 - Font family
 - Font size (pt/px)
 - Font weight (regular, medium, bold, etc.)
@@ -320,7 +325,7 @@ Status: ❌ Vertical padding mismatch (8px vs 12px)
 1. **[Property]**: Figma `[value]` ≠ Code `[value]`
    - Fix: [specific change needed]
    - File: [path:line]
-   - Status: [✓ Fixed | ⚠ Manual fix required]
+   - Status: [✓ Fixed | ⚠ Manual fix required | ℹ Token correct, parameter mismatch (No fix)]
 
 ## Matches
 
@@ -366,10 +371,11 @@ Enter choice (1-3):
 
 **For Each Difference**:
 
-1. Identify file(s) to modify
-2. Locate exact code to change
-3. Prepare new code
-4. Validate change won't break other code
+1. **Filter**: Exclude differences where the token/name is correct but parameters differ (e.g., Typography token match).
+2. Identify file(s) to modify
+3. Locate exact code to change
+4. Prepare new code
+5. Validate change won't break other code
 
 #### 8.2: Apply Changes
 

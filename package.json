@@ -36,7 +36,7 @@
         "name": "helix",
         "fullName": "Helix Design Workflows",
         "description": "Compare Figma designs with code or generate production-ready code from Figma",
-        "isSticky": true,
+        "isSticky": false,
         "commands": [
           {
             "name": "fit-finish",
