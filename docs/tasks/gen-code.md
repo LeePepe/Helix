@@ -191,6 +191,15 @@ Consult `.github/design-system-guide.md` for layout patterns and code examples.
 
 **Action**: Convert Figma variables to project design system tokens
 
+#### Token Mapping Workflow
+
+To generate code with the correct design tokens (for Typography, Colors, etc.), follow this mapping flow:
+
+1. **Figma Source**: Identify the **Style Name** or **Variable Name** in the Figma design (e.g., "Text/Lg Title", "Color/Primary").
+2. **Name Extraction**: Extract the meaningful segment of the name (typically the leaf name after the last slash, e.g., "Lg Title" or "Primary").
+3. **Design System Lookup**: Look up this name in the project's **Design System Definition** (refer to `design-system-guide.md` for specific file paths for font, color, or other style properties).
+4. **Generation**: Generate code using the specific token/enum case that maps to this name.
+
 #### 5.1: Map Colors
 
 **For Each Color Used**:
