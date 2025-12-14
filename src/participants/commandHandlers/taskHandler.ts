@@ -82,16 +82,26 @@ export class TaskHandler {
             stream.progress('Loading task prompt...');
             const taskPrompt = await this.promptService.loadTaskPrompt(config.taskPromptName);
 
+            // Get Context
+            stream.progress('Analyzing context...');
+            const contextData = await this.getContextFromRequest(request);
+
             // Build system prompt with task instructions and design system
             stream.progress(config.progressMessage);
             const systemPrompt = this.buildSystemPrompt(taskPrompt, designSystemGuide);
 
             // Build initial messages
-            // Merge system prompt and user prompt to avoid sending multiple User messages
+            // Merge system prompt, context, and user prompt to avoid sending multiple User messages
             // which can cause 400 Bad Request errors with some providers
-            const fullPrompt = request.prompt 
-                ? `${systemPrompt}\n\nUser Request:\n${request.prompt}`
-                : systemPrompt;
+            let fullPrompt = systemPrompt;
+
+            if (contextData) {
+                fullPrompt += `\n\n# Context\n${contextData}`;
+            }
+
+            if (request.prompt) {
+                fullPrompt += `\n\nUser Request:\n${request.prompt}`;
+            }
 
             const messages: vscode.LanguageModelChatMessage[] = [
                 vscode.LanguageModelChatMessage.User(fullPrompt)
@@ -103,6 +113,46 @@ export class TaskHandler {
         } catch (error) {
             throw new Error(`${config.title} failed: ${error instanceof Error ? error.message : String(error)}`);
         }
+    }
+
+    /**
+     * Extract context from request references or active editor
+     */
+    private async getContextFromRequest(request: vscode.ChatRequest): Promise<string> {
+        let contextMsg = '';
+        
+        // 1. Check explicit references (user attached files)
+        if (request.references && request.references.length > 0) {
+            for (const ref of request.references) {
+                if (ref.value instanceof vscode.Uri) {
+                    const uri = ref.value as vscode.Uri;
+                    try {
+                        // Try to find if document is open to get unsaved changes
+                        const openDoc = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
+                        let content = '';
+                        if (openDoc) {
+                            content = openDoc.getText();
+                        } else {
+                            content = await this.fileService.readFile(uri.fsPath);
+                        }
+                        contextMsg += `\n\nFile: ${uri.fsPath}\n\`\`\`\n${content}\n\`\`\``;
+                    } catch (e) {
+                        console.warn(`Failed to read reference file ${uri.fsPath}`, e);
+                    }
+                }
+            }
+        }
+        
+        // 2. If no explicit references, check active editor
+        if (!contextMsg) {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor) {
+                const content = activeEditor.document.getText();
+                contextMsg += `\n\nActive File: ${activeEditor.document.uri.fsPath}\n\`\`\`\n${content}\n\`\`\``;
+            }
+        }
+        
+        return contextMsg;
     }
 
     // ============================================

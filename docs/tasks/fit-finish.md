@@ -20,7 +20,7 @@ Analyze and report differences across these categories:
 For each difference, determine:
 
 - **Property**: Name of the property (e.g., "Background Color", "Font Size")
-- **Figma Value**: Value in Figma design
+- **Figma Value**: Value in Figma design. **IMPORTANT**: If the design context provides a named style or token (e.g., "Text/XS Attribution"), use that token name as the Figma Value instead of raw values.
 - **Code Value**: Value in code implementation
 - **Fix**: Specific change needed (e.g., "Change background from #F0F0F0 to #FFFFFF")
 
@@ -234,7 +234,7 @@ Status: ❌ Mismatch (lighter in Figma)
 
 **Compare**:
 
-- **Token/Name Priority**: If a Font Token or Name is available, prioritize checking if the code uses the correct token/name.
+- **Token/Name Priority**: If a Font Token/Name/Style is available (e.g., "Text/XS Attribution"), prioritize checking if the code uses the correct token/name.
 - **Parameter Validation**: If the token/name is correct but underlying parameters (size, weight, etc.) differ, point out the discrepancy but **do not modify** the code parameters.
 - Font family
 - Font size (pt/px)

@@ -18,6 +18,7 @@ Requirements:
 6. Support theme variations (light/dark) using design system tokens
 7. Follow all code patterns and conventions from the Design System Guide
 8. Add helpful comments for complex logic
+9. **IMPORTANT**: If the design context provides a named style or token (e.g., "Text/XS Attribution"), you MUST use the corresponding design system token in the generated code instead of hardcoding raw values (e.g., font size, weight).
 
 ---
 
@@ -205,7 +206,7 @@ Consult `.github/design-system-guide.md` for layout patterns and code examples.
 
 **For Each Typography Style**:
 
-1. **Token Priority**: Check if the Figma design uses a named text style or variable.
+1. **Token Priority**: Check if the Figma design uses a named text style or variable (e.g., "Text/XS Attribution").
 2. **Map to Token**: If a named style exists, map it to the corresponding design system typography token from `.github/design-system-guide.md`.
 3. **Fallback**: If no token is found, use raw values (font family, size, weight) but add a comment suggesting to add a new token to the design system.
 
