@@ -49,11 +49,19 @@ Generate production-ready code from Figma designs with:
 
 ## Usage
 
+You can provide Figma context in two ways:
+1. **Select in Figma Desktop**: Select the element in Figma Desktop (requires Figma MCP).
+2. **Provide URL**: Paste the Figma URL in the command.
+
 ### Fit & Finish Command
 
 Compare a Figma design with your code:
 
 ```
+# Option 1: Select element in Figma Desktop, then run:
+@helix /fit-finish src/components/Button.swift
+
+# Option 2: Provide Figma URL:
 @helix /fit-finish https://figma.com/file/ABC?node-id=123:456 src/components/Button.swift
 ```
 
@@ -68,6 +76,10 @@ Compare a Figma design with your code:
 Generate code from a Figma design:
 
 ```
+# Option 1: Select element in Figma Desktop, then run:
+@helix /gen-code
+
+# Option 2: Provide Figma URL:
 @helix /gen-code https://figma.com/file/ABC?node-id=789:012
 ```
 
