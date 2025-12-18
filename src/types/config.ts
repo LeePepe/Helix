@@ -9,6 +9,9 @@ export interface HelixConfig {
   /** Path to the design system guide markdown file */
   designSystemPath: string;
 
+  /** Path to save UI fit & finish reports */
+  reportsPath: string;
+
   /** Enable remote Figma MCP (URL-based access) */
   enableRemoteFigma: boolean;
 
@@ -42,6 +45,7 @@ export const DEFAULT_TOOLS: string[] = [
  */
 export const DEFAULT_CONFIG: HelixConfig = {
   designSystemPath: '.github/design-system-guide.md',
+  reportsPath: '.github/ui-fit-finish/reports',
   enableRemoteFigma: false,
   modelFamily: 'claude-sonnet-4.5',
   tools: DEFAULT_TOOLS

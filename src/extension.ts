@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { HelixParticipant } from './participants/helixParticipant';
 import { FigmaService } from './services/figmaService';
+import { ConfigService } from './services/configService';
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Helix Design Workflows extension is activating...');
@@ -20,8 +21,8 @@ export function activate(context: vscode.ExtensionContext) {
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('helix.openDesignSystemGuide', () => {
-      const config = vscode.workspace.getConfiguration('helix');
-      const designSystemPath = config.get<string>('designSystemPath', '.github/design-system-guide.md');
+      const configService = new ConfigService();
+      const designSystemPath = configService.getDesignSystemPath();
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
       if (workspaceFolder) {

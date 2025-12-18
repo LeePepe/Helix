@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { FileService } from './fileService';
+import { ConfigService } from './configService';
 
 export interface ComparisonResult {
   componentName: string;
@@ -25,9 +26,11 @@ export interface Difference {
 }
 
 export class ReportService {
-  private fileService: FileService;
+  private configService: ConfigService;
 
   constructor() {
+    this.fileService = new FileService();
+    this.configService = new Config
     this.fileService = new FileService();
   }
 
@@ -39,8 +42,7 @@ export class ReportService {
     figmaUrl: string,
     codeFilePath: string
   ): Promise<string> {
-    const config = vscode.workspace.getConfiguration('helix');
-    const reportsPath = config.get<string>('reportsPath', '.github/ui-fit-finish/reports');
+    const reportsPath = this.configService.getReportsPath();
 
     // Generate timestamp
     const timestamp = this.formatTimestamp(new Date());

@@ -19,9 +19,9 @@ export class DesignSystemService {
    * Load the design system guide content from file
    */
   async loadGuideContent(): Promise<string> {
-    const config = vscode.workspace.getConfiguration('helix');
-    const configPath = config.get<string>('designSystemPath', '.github/design-system-guide.md');
-
+    const configPath = this.configService.getDesignSystemPath();
+    console.log(`Loading design system guide from path: ${configPath}`);
+    
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       throw new Error('No workspace folder open. Please open a workspace to use Helix.');
@@ -46,8 +46,8 @@ export class DesignSystemService {
    * Check if the design system guide file exists
    */
   async checkDesignSystemExists(): Promise<boolean> {
-    const config = vscode.workspace.getConfiguration('helix');
-    const configPath = config.get<string>('designSystemPath', '.github/design-system-guide.md');
+    const configPath = this.configService.getDesignSystemPath();
+    console.log(`Checking for design system guide at path: ${configPath}`);
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
@@ -113,8 +113,7 @@ export class DesignSystemService {
    * Save the design system guide to the workspace
    */
   async saveDesignSystem(content: string): Promise<void> {
-    const config = vscode.workspace.getConfiguration('helix');
-    const configPath = config.get<string>('designSystemPath', '.github/design-system-guide.md');
+    const configPath = this.configService.getDesignSystemPath();
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {

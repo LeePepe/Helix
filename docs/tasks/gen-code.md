@@ -19,6 +19,7 @@ Requirements:
 7. Follow all code patterns and conventions from the Design System Guide
 8. Add helpful comments for complex logic
 9. **IMPORTANT**: If the design context provides a named style or token (e.g., "Text/XS Attribution"), you MUST use the corresponding design system token in the generated code instead of hardcoding raw values (e.g., font size, weight).
+10. Ensure layout dimensions (width, height) and constraints (fixed, hug, fill) are correctly implemented.
 
 ---
 
@@ -321,6 +322,14 @@ Follow localization patterns documented in `.github/design-system-guide.md`.
 - [ ] Proper imports/dependencies
 - [ ] No compilation/build errors
 - [ ] Follows code patterns from design system guide
+
+#### 7.4: Layout & Dimensions Validation
+
+**Check**:
+
+- [ ] Width and height constraints match design (Fixed vs Hug vs Fill)
+- [ ] Min/Max dimensions are respected
+- [ ] Content clipping (overflow) settings match design
 
 ---
 

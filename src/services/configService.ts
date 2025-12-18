@@ -15,6 +15,14 @@ export class ConfigService {
   }
 
   /**
+   * Get the path to save UI fit & finish reports
+   */
+  getReportsPath(): string {
+    const config = vscode.workspace.getConfiguration('helix');
+    return config.get<string>('reportsPath', DEFAULT_CONFIG.reportsPath);
+  }
+
+  /**
    * Check if remote Figma MCP is enabled
    */
   isRemoteFigmaEnabled(): boolean {
@@ -61,15 +69,4 @@ export class ConfigService {
     });
   }
 
-  /**
-   * Get the full configuration object
-   */
-  getConfig(): HelixConfig {
-    return {
-      designSystemPath: this.getDesignSystemPath(),
-      enableRemoteFigma: this.isRemoteFigmaEnabled(),
-      modelFamily: this.getModelFamily(),
-      tools: this.getTools()
-    };
-  }
 }
