@@ -50,6 +50,7 @@ export class DesignSystemAgent extends BaseAgent {
 
 		// 尝试多个可能的路径
 		const possiblePaths = [
+			path.join(workspaceRoot, '.github', 'design-system-guide.md'), // 优先检查 .github 目录（推荐位置）
 			path.join(workspaceRoot, 'design-system-guide.md'),
 			path.join(workspaceRoot, 'docs', 'design-system-guide.md'),
 			path.join(workspaceRoot, '.helix', 'design-system-guide.md')
@@ -65,9 +66,10 @@ export class DesignSystemAgent extends BaseAgent {
 
 		throw new Error(
 			'❌ Design system guide not found!\n\n' +
-			'Please ensure `design-system-guide.md` exists in your project root.\n' +
+			'Please ensure `design-system-guide.md` exists in your project.\n' +
 			'Run the initialization flow first to create one.\n\n' +
-			'Expected locations:\n' +
+			'Expected locations (checked in order):\n' +
+			'- .github/design-system-guide.md (recommended)\n' +
 			'- design-system-guide.md\n' +
 			'- docs/design-system-guide.md\n' +
 			'- .helix/design-system-guide.md'
