@@ -6,8 +6,9 @@ import { ToolRegistry } from '../runtime/ToolRegistry';
 import promptContent from './prompts/comparer.md';
 
 export interface ComparerInput {
-  figmaData: any;
-  implementationContext: any;
+  // Direct data input from previous agents
+  figmaData?: any;
+  implementationContext?: any;
 }
 
 export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
@@ -18,14 +19,19 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
   protected async execute(
     ctx: ExecutionContext,
     tools: ToolRegistry,
-    input: ComparerInput
+    input: ComparerInput,
+    stream?: any
   ): Promise<CompareResult> {
+    const figmaData = input.figmaData;
+    const implementationContext = input.implementationContext;
+
+    // Perform comparison
     const prompt = promptContent;
     const messages = [
       vscode.LanguageModelChatMessage.User(prompt),
       vscode.LanguageModelChatMessage.User(
-        `Figma Design:\n${JSON.stringify(input.figmaData, null, 2)}\n\n` +
-        `Implementation:\n${JSON.stringify(input.implementationContext, null, 2)}`
+        `Figma Design:\n${JSON.stringify(figmaData, null, 2)}\n\n` +
+        `Implementation:\n${JSON.stringify(implementationContext, null, 2)}`
       ),
     ];
 

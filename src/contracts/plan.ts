@@ -21,10 +21,41 @@ export const SubtaskSchema = z.object({
 
 export type Subtask = z.infer<typeof SubtaskSchema>;
 
+// ============================================================================
+// Agent Workflow Plan
+// ============================================================================
+
+export const AgentWorkflowStepSchema = z.object({
+  agentName: z.string(),
+  executionOrder: z.number(),
+  parallelGroup: z.number(),
+  inputs: z.record(z.any()).optional(),
+  dependencies: z.array(z.string()),
+  rationale: z.string().optional(), // Why this agent is needed
+});
+
+export type AgentWorkflowStep = z.infer<typeof AgentWorkflowStepSchema>;
+
+// ============================================================================
+// Plan Result - supports both subtasks and agent workflow
+// ============================================================================
+
 export const PlanResultSchema = z.object({
   schemaVersion: z.literal('1.0'),
   goal: z.string(),
-  subtasks: z.array(SubtaskSchema),
+
+  // Planning mode: what type of plan is this?
+  planType: z.enum(['subtasks', 'agent-workflow', 'hybrid']).default('subtasks'),
+
+  // Traditional code implementation subtasks
+  subtasks: z.array(SubtaskSchema).optional(),
+
+  // Agent workflow for dynamic agent orchestration
+  agentWorkflow: z.array(AgentWorkflowStepSchema).optional(),
+
+  // Reasoning about the plan
+  reasoning: z.string().optional(),
+
   estimatedIterations: z.number().optional(),
   trace: z.array(TraceEventSchema).optional(),
 });

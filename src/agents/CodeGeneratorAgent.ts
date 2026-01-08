@@ -5,10 +5,14 @@ import { ExecutionContext } from '../runtime/ExecutionContext';
 import { ToolRegistry } from '../runtime/ToolRegistry';
 import promptContent from './prompts/code-generator.md';
 import { Subtask } from '../contracts'; // Ensure Subtask is imported if previously missing or implicit
+import { SummarizedContext } from './utils/contextSummarizer';
 
 export interface CodeGeneratorInput {
-  subtask: Subtask;
-  context: any;
+  goal?: string;
+
+  // Subtask-based generation
+  subtask?: Subtask;
+  context?: SummarizedContext;
 }
 
 export class CodeGeneratorAgent extends BaseAgent<CodeGeneratorInput, CodegenResult> {
@@ -19,15 +23,29 @@ export class CodeGeneratorAgent extends BaseAgent<CodeGeneratorInput, CodegenRes
   protected async execute(
     ctx: ExecutionContext,
     tools: ToolRegistry,
-    input: CodeGeneratorInput
+    input: CodeGeneratorInput,
+    stream?: any
   ): Promise<CodegenResult> {
+    const context = input.context;
+    const goal = input.goal || 'Generate code from design';
+
+    // Generate code
     const prompt = promptContent;
+
+    let userMessage: string;
+    if (input.subtask) {
+      // Legacy subtask-based generation
+      userMessage = `Subtask:\n${JSON.stringify(input.subtask, null, 2)}\n\n` +
+        `Context:\n${JSON.stringify(context, null, 2)}`;
+    } else {
+      // Direct generation from context
+      userMessage = `Goal: ${goal}\n\n` +
+        `Context:\n${JSON.stringify(context, null, 2)}`;
+    }
+
     const messages = [
       vscode.LanguageModelChatMessage.User(prompt),
-      vscode.LanguageModelChatMessage.User(
-        `Subtask:\n${JSON.stringify(input.subtask, null, 2)}\n\n` +
-        `Context:\n${JSON.stringify(input.context, null, 2)}`
-      ),
+      vscode.LanguageModelChatMessage.User(userMessage),
     ];
 
     const llmResult = await tools.invoke(ctx, 'llm.chatJSON', {

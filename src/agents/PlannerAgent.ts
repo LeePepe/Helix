@@ -1,24 +1,26 @@
 import * as vscode from 'vscode';
 import { BaseAgent } from './base/Agent';
-import { Plan, PlanSchema, PlanResultSchema, PlanResult } from '../contracts';
+import { PlanResultSchema, PlanResult } from '../contracts';
 import { ExecutionContext } from '../runtime/ExecutionContext';
 import { ToolRegistry } from '../runtime/ToolRegistry';
 import promptContent from './prompts/planner.md';
+import { SummarizedContext } from './utils/contextSummarizer';
 
 export interface PlannerInput {
   goal: string;
-  context: any; // Flexible context object
+  context: SummarizedContext; // Summarized context to avoid token limits
 }
 
 export class PlannerAgent extends BaseAgent<PlannerInput, PlanResult> {
   readonly name = 'Planner';
-  readonly description = 'Creates execution plans with subtask DAG';
-  readonly outputSchema = PlanResultSchema;
+  readonly description = 'Creates execution plans with subtask DAG or agent workflow';
+  readonly outputSchema = PlanResultSchema as any; // Type assertion needed for optional fields
 
   protected async execute(
     ctx: ExecutionContext,
     tools: ToolRegistry,
-    input: PlannerInput
+    input: PlannerInput,
+    stream?: any
   ): Promise<PlanResult> {
     const prompt = promptContent;
     const messages = [

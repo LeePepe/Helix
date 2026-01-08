@@ -180,6 +180,31 @@ class ToolRegistry {
 - Consistent error handling
 - Automatic tracing
 
+#### StreamHandler
+
+```typescript
+class StreamHandler {
+  progress(message: string): void;
+  markdown(content: string): void;
+
+  // Agent flow tracking (NEW)
+  agentStart(agentName: string, message?: string): void;
+  agentProgress(agentName: string, phase: 'executing' | 'validating', message?: string): void;
+  agentComplete(agentName: string, metrics?: AgentMetrics): void;
+  agentError(agentName: string, error: string | Error): void;
+
+  // Visualization
+  displayAgentMetrics(metrics: AgentMetrics): void;
+  displayAgentFlow(): void;
+  displayMetricsSummary(allMetrics: AgentMetrics[]): void;
+}
+```
+
+- VSCode chat response stream wrapper
+- Real-time progress updates during agent execution
+- Agent execution flow tracking and visualization
+- Metrics display with token usage and timing
+
 ### 3. Services
 
 Services are **infrastructure only** - no business logic or prompts:

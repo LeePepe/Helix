@@ -3,16 +3,28 @@ import { ToolRegistry } from '../runtime/ToolRegistry';
 import { LLMService } from '../services/llmService';
 import { FigmaService } from '../services/figmaService';
 import { FileService } from '../services/fileService';
+import { FigmaAnalyzerAgent } from '../agents/FigmaAnalyzerAgent';
+import { DesignSystemAnalyzerAgent } from '../agents/DesignSystemAnalyzerAgent';
+import { ComparerAgent } from '../agents/ComparerAgent';
+import { PlannerAgent } from '../agents/PlannerAgent';
+import { CodeGeneratorAgent } from '../agents/CodeGeneratorAgent';
 
 /**
- * Setup and register all tools
+ * Setup and register all tools including agents
  */
 export function setupTools(): ToolRegistry {
   const registry = new ToolRegistry();
-  
+
   const llmService = new LLMService();
   const figmaService = new FigmaService();
   const fileService = new FileService();
+
+  // Initialize agents
+  const figmaAnalyzer = new FigmaAnalyzerAgent();
+  const designSystemAnalyzer = new DesignSystemAnalyzerAgent();
+  const comparer = new ComparerAgent();
+  const planner = new PlannerAgent();
+  const codeGenerator = new CodeGeneratorAgent();
 
   // Register LLM tools
   registry.register({
@@ -122,6 +134,57 @@ export function setupTools(): ToolRegistry {
     description: 'List directory contents',
     execute: async (ctx: ExecutionContext, args: any) => {
       return await fileService.listDirectory(ctx, args.dirPath);
+    },
+  });
+
+  // Register agents as tools so they can be called by other agents
+  registry.register({
+    id: 'agent.figmaAnalyzer',
+    name: 'Figma Analyzer Agent',
+    description: 'Analyzes Figma design and extracts UI structure',
+    execute: async (ctx: ExecutionContext, args: any) => {
+      const result = await figmaAnalyzer.run(ctx, registry, args, args.stream);
+      return { ok: true, data: result };
+    },
+  });
+
+  registry.register({
+    id: 'agent.designSystemAnalyzer',
+    name: 'Design System Analyzer Agent',
+    description: 'Maps Figma components to design system',
+    execute: async (ctx: ExecutionContext, args: any) => {
+      const result = await designSystemAnalyzer.run(ctx, registry, args, args.stream);
+      return { ok: true, data: result };
+    },
+  });
+
+  registry.register({
+    id: 'agent.comparer',
+    name: 'Comparer Agent',
+    description: 'Compares design against implementation',
+    execute: async (ctx: ExecutionContext, args: any) => {
+      const result = await comparer.run(ctx, registry, args, args.stream);
+      return { ok: true, data: result };
+    },
+  });
+
+  registry.register({
+    id: 'agent.planner',
+    name: 'Planner Agent',
+    description: 'Creates execution plans',
+    execute: async (ctx: ExecutionContext, args: any) => {
+      const result = await planner.run(ctx, registry, args, args.stream);
+      return { ok: true, data: result };
+    },
+  });
+
+  registry.register({
+    id: 'agent.codeGenerator',
+    name: 'Code Generator Agent',
+    description: 'Generates code from specifications',
+    execute: async (ctx: ExecutionContext, args: any) => {
+      const result = await codeGenerator.run(ctx, registry, args, args.stream);
+      return { ok: true, data: result };
     },
   });
 

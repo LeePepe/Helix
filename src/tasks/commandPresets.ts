@@ -7,7 +7,9 @@ import { AgentExecutionPlan } from '../agents/IntentAnalyzerAgent';
 
 /**
  * Build from Figma pipeline
- * Standard flow: Analyze design → Map to design system → Plan → Generate code
+ * Step 1 (Parallel): Fetch Figma + Design System
+ * Step 2: Plan implementation
+ * Step 3: Generate code
  */
 export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
   {
@@ -19,22 +21,22 @@ export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
   },
   {
     agentName: 'DesignSystemAnalyzer',
-    executionOrder: 2,
-    parallelGroup: 2,
+    executionOrder: 1,
+    parallelGroup: 1,
     inputs: {},
     dependencies: [],
   },
   {
     agentName: 'Planner',
-    executionOrder: 3,
-    parallelGroup: 3,
+    executionOrder: 2,
+    parallelGroup: 2,
     inputs: {},
-    dependencies: ['DesignSystemAnalyzer'],
+    dependencies: ['FigmaAnalyzer', 'DesignSystemAnalyzer'],
   },
   {
     agentName: 'CodeGenerator',
-    executionOrder: 4,
-    parallelGroup: 4,
+    executionOrder: 3,
+    parallelGroup: 3,
     inputs: {},
     dependencies: ['Planner'],
   },
@@ -42,8 +44,8 @@ export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
 
 /**
  * Fit and Finish pipeline
- * Iterative refinement flow: Compare → Plan fixes → Generate code
- * Note: FigmaAnalyzer runs once at the start (handled by task)
+ * Step 1 (Parallel): Fetch Figma + Design System
+ * Step 2: Compare design vs implementation
  */
 export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
   {
@@ -54,25 +56,18 @@ export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
     dependencies: [],
   },
   {
+    agentName: 'DesignSystemAnalyzer',
+    executionOrder: 1,
+    parallelGroup: 1,
+    inputs: {},
+    dependencies: [],
+  },
+  {
     agentName: 'Comparer',
     executionOrder: 2,
     parallelGroup: 2,
     inputs: {},
-    dependencies: ['FigmaAnalyzer'],
-  },
-  {
-    agentName: 'Planner',
-    executionOrder: 3,
-    parallelGroup: 3,
-    inputs: {},
-    dependencies: ['Comparer'],
-  },
-  {
-    agentName: 'CodeGenerator',
-    executionOrder: 4,
-    parallelGroup: 4,
-    inputs: {},
-    dependencies: ['Planner'],
+    dependencies: ['FigmaAnalyzer', 'DesignSystemAnalyzer'],
   },
 ];
 

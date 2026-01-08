@@ -20,7 +20,8 @@ export class ReportGeneratorAgent extends BaseAgent<ReportGeneratorInput, Report
   protected async execute(
     ctx: ExecutionContext,
     tools: ToolRegistry,
-    input: ReportGeneratorInput
+    input: ReportGeneratorInput,
+    stream?: any
   ): Promise<ReportResult> {
     // Generate report content
     const content = this.generateReportContent(input);

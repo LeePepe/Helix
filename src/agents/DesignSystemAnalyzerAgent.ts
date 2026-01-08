@@ -26,7 +26,8 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
   protected async execute(
     ctx: ExecutionContext,
     tools: ToolRegistry,
-    input: DesignSystemAnalyzerInput
+    input: DesignSystemAnalyzerInput,
+    stream?: any
   ): Promise<DesignSystemMappingResult> {
     // 1. Read design system documentation if available
     let designSystemInfo = 'No design system documentation provided.';
