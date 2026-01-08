@@ -53,7 +53,8 @@ export class TaskOrchestrator {
           model: this.configService.getModelFamily(),
           dryRun: false,
         },
-        token
+        token,
+        request.toolInvocationToken
       );
 
       // Setup runtime
@@ -124,7 +125,8 @@ export class TaskOrchestrator {
           maxIterations: 3,
           dryRun: false,
         },
-        token
+        token,
+        request.toolInvocationToken
       );
 
       // Setup runtime
@@ -163,21 +165,49 @@ export class TaskOrchestrator {
   }
 
   /**
-   * Extract Figma node ID from URL or prompt
+   * Extract Figma node ID or URL from prompt
+   * Returns either:
+   * - Full Figma URL (if found) - MCP tool will extract node ID automatically
+   * - Node ID in format "123:456" (if found)
+   * - undefined (if neither found)
    */
   private extractNodeId(prompt: string): string | undefined {
-    // Try to extract from Figma URL
+    console.log('[Helix] [TaskOrchestrator] ========== extractNodeId START ==========');
+    console.log('[Helix] [TaskOrchestrator] Input prompt:', prompt);
+
+    // First, try to extract full Figma URL - FigmaAnalyzerAgent will handle URL parsing
+    const figmaUrlMatch = prompt.match(/(https?:\/\/(?:www\.)?figma\.com\/(?:design|file)\/[^\s]+)/);
+    if (figmaUrlMatch) {
+      const url = figmaUrlMatch[1];
+      console.log('[Helix] [TaskOrchestrator] ✅ Found complete Figma URL');
+      console.log('[Helix] [TaskOrchestrator] Extracted URL:', url);
+      console.log('[Helix] [TaskOrchestrator] 📌 Passing URL to FigmaAnalyzerAgent (it will extract node-id)');
+      console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
+      return url;
+    }
+
+    // If no URL, try to extract from node-id parameter
     const urlMatch = prompt.match(/node-id=([^&\s]+)/);
     if (urlMatch) {
-      return urlMatch[1].replace(/-/g, ':');
+      const extracted = urlMatch[1];
+      console.log('[Helix] [TaskOrchestrator] ✅ Found node-id parameter');
+      console.log('[Helix] [TaskOrchestrator] Extracted value:', extracted);
+      console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
+      return extracted;
     }
 
     // Check if direct node ID provided
     const nodeIdMatch = prompt.match(/\b(\d+[-:]\d+)\b/);
     if (nodeIdMatch) {
-      return nodeIdMatch[1].replace(/-/g, ':');
+      const extracted = nodeIdMatch[1];
+      console.log('[Helix] [TaskOrchestrator] ✅ Found direct nodeId pattern');
+      console.log('[Helix] [TaskOrchestrator] Extracted value:', extracted);
+      console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
+      return extracted;
     }
 
+    console.log('[Helix] [TaskOrchestrator] ⚠️  No nodeId or Figma URL found in prompt');
+    console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
     return undefined;
   }
 }

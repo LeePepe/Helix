@@ -3,6 +3,8 @@ import { BaseAgent } from './base/Agent';
 import { FigmaAnalysisResult, FigmaAnalysisResultSchema } from '../contracts';
 import { ExecutionContext } from '../runtime/ExecutionContext';
 import { ToolRegistry } from '../runtime/ToolRegistry';
+import { FigmaService } from '../services/figmaService';
+import { LLMService } from '../services/llmService';
 import promptContent from './prompts/figma-analyzer.md';
 
 /**
@@ -16,31 +18,56 @@ export interface FigmaAnalyzerInput {
 /**
  * Figma Analyzer Agent
  * Analyzes Figma designs and produces structured UI breakdown
+ * 
+ * Uses FigmaService directly to fetch design context from Figma,
+ * then uses LLMService to parse and analyze the design data.
  */
 export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnalysisResult> {
   readonly name = 'FigmaAnalyzer';
   readonly description = 'Analyzes Figma designs and produces structured UI breakdown';
   readonly outputSchema = FigmaAnalysisResultSchema;
 
+  private readonly figmaService: FigmaService;
+  private readonly llmService: LLMService;
+
+  constructor(figmaService?: FigmaService, llmService?: LLMService) {
+    super();
+    this.figmaService = figmaService ?? new FigmaService();
+    this.llmService = llmService ?? new LLMService();
+  }
+
   protected async execute(
     ctx: ExecutionContext,
-    tools: ToolRegistry,
+    _tools: ToolRegistry,
     input: FigmaAnalyzerInput,
     stream?: any
   ): Promise<FigmaAnalysisResult> {
     ctx.trace('agent', 'figma-analyzer-execute', { nodeId: input.nodeId });
 
-    // 1. Get design context from Figma
+    // Extract node ID from URL if necessary
+    let effectiveNodeId = input.nodeId;
+    if (input.nodeId?.includes('figma.com')) {
+      const parsed = this.figmaService.parseFigmaUrl(input.nodeId);
+      if (parsed.nodeId) {
+        effectiveNodeId = parsed.nodeId;
+        console.log(`[Helix] [FigmaAnalyzerAgent] Cleaned nodeId from URL: ${effectiveNodeId}`);
+      }
+    }
+
+    // 1. Get design context from Figma using FigmaService directly
     stream?.markdown(`\n**🎨 Fetching Figma design context...**\n`);
-    stream?.markdown(`- Node ID: \`${input.nodeId || 'not provided'}\`\n`);
+    stream?.markdown(`- Source: \`${input.nodeId || 'not provided'}\`\n`);
+    if (effectiveNodeId !== input.nodeId && effectiveNodeId) {
+      stream?.markdown(`- Cleaned Node ID: \`${effectiveNodeId}\`\n`);
+    }
     stream?.markdown(`- Force Code: ${input.forceCode || false}\n\n`);
 
-    console.log('[Helix] [FigmaAnalyzer] 🎨 Fetching Figma design context...');
-    console.log('[Helix] [FigmaAnalyzer] Input nodeId:', input.nodeId);
+    console.log('[Helix] [FigmaAnalyzer] 🎨 Fetching Figma design context via FigmaService...');
+    console.log('[Helix] [FigmaAnalyzer] Original source:', input.nodeId);
+    console.log('[Helix] [FigmaAnalyzer] Effective nodeId:', effectiveNodeId);
     console.log('[Helix] [FigmaAnalyzer] Input forceCode:', input.forceCode);
 
-    const designContextResult = await tools.invoke(ctx, 'figma.getDesignContext', {
-      nodeId: input.nodeId,
+    const designContextResult = await this.figmaService.getDesignContext(ctx, effectiveNodeId, {
       forceCode: input.forceCode,
     });
 
@@ -74,7 +101,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     // 2. Load prompt
     const prompt = promptContent;
 
-    // 3. Call LLM with design context
+    // 3. Call LLM with design context using LLMService directly
     const messages = [
       vscode.LanguageModelChatMessage.User(prompt),
       vscode.LanguageModelChatMessage.User(
@@ -82,18 +109,15 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       ),
     ];
 
-    console.log('[Helix] [FigmaAnalyzer] === LLM Request Start ===');
+    console.log('[Helix] [FigmaAnalyzer] === LLM Request Start (via LLMService) ===');
     console.log('[Helix] [FigmaAnalyzer] Prompt length:', prompt.length);
     console.log('[Helix] [FigmaAnalyzer] Messages count:', messages.length);
     console.log('[Helix] [FigmaAnalyzer] Schema:', JSON.stringify(FigmaAnalysisResultSchema, null, 2));
 
-    const llmResult = await tools.invoke(ctx, 'llm.chatJSON', {
-      messages,
-      schema: {
-        name: 'FigmaAnalysisResult',
-        description: 'Structured analysis of Figma design',
-        schema: FigmaAnalysisResultSchema,
-      },
+    const llmResult = await this.llmService.chatJSON(ctx, messages, {
+      name: 'FigmaAnalysisResult',
+      description: 'Structured analysis of Figma design',
+      schema: FigmaAnalysisResultSchema,
     });
 
     console.log('[Helix] [FigmaAnalyzer] === LLM Request Complete ===');

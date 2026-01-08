@@ -19,8 +19,8 @@ export function setupTools(): ToolRegistry {
   const figmaService = new FigmaService();
   const fileService = new FileService();
 
-  // Initialize agents
-  const figmaAnalyzer = new FigmaAnalyzerAgent();
+  // Initialize agents (inject services where needed)
+  const figmaAnalyzer = new FigmaAnalyzerAgent(figmaService, llmService);
   const designSystemAnalyzer = new DesignSystemAnalyzerAgent();
   const comparer = new ComparerAgent();
   const planner = new PlannerAgent();

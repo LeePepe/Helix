@@ -48,6 +48,8 @@ export class FigmaService {
 
   /**
    * Get design context from Figma
+   * @param nodeId - Can be a node ID (e.g., "123:456") or a full Figma URL (e.g., "https://figma.com/design/ABC/name?node-id=123-456")
+   *                 The MCP tool will automatically extract the node ID from the URL if provided.
    */
   async getDesignContext(
     ctx: ExecutionContext,
@@ -58,14 +60,22 @@ export class FigmaService {
     }
   ): Promise<ToolResult> {
     try {
+      console.log('[Helix] [FigmaService] ========== getDesignContext START ==========');
+      console.log('[Helix] [FigmaService] Input nodeId (or URL):', nodeId);
+      console.log('[Helix] [FigmaService] Input options:', JSON.stringify(options, null, 2));
+
       ctx.trace('service', 'figma-get-design-context', { nodeId, options });
 
       const tools = vscode.lm.tools;
-      const designContextTool = tools.find(t => 
+      console.log('[Helix] [FigmaService] Total available tools:', tools.length);
+      console.log('[Helix] [FigmaService] Tool names:', tools.map(t => t.name));
+
+      const designContextTool = tools.find(t =>
         t.name === 'mcp_figma-desktop_get_design_context'
       );
 
       if (!designContextTool) {
+        console.error('[Helix] [FigmaService] ❌ Design context tool not found!');
         return {
           ok: false,
           error: {
@@ -75,6 +85,13 @@ export class FigmaService {
         };
       }
 
+      console.log('[Helix] [FigmaService] ✅ Found design context tool');
+      console.log('[Helix] [FigmaService] Tool info:', {
+        name: designContextTool.name,
+        description: designContextTool.description,
+        inputSchema: designContextTool.inputSchema,
+      });
+
       // Build parameters
       const params: any = {
         clientLanguages: ctx.workspaceInfo.language || 'unknown',
@@ -82,37 +99,67 @@ export class FigmaService {
       };
 
       if (nodeId) {
+        // Pass nodeId directly - MCP tool can handle both node IDs and full URLs
         params.nodeId = nodeId;
+        const isUrl = nodeId.includes('figma.com');
+        console.log(`[Helix] [FigmaService] 📌 Adding ${isUrl ? 'Figma URL' : 'nodeId'} to params:`, nodeId);
+      } else {
+        console.log('[Helix] [FigmaService] ⚠️  No nodeId provided - will use current selection');
       }
 
       if (options?.forceCode) {
         params.forceCode = true;
+        console.log('[Helix] [FigmaService] 🔧 forceCode enabled');
       }
+
+      console.log('[Helix] [FigmaService] 📤 Invoking MCP tool with params:');
+      console.log('[Helix] [FigmaService] Params:', JSON.stringify(params, null, 2));
 
       // Invoke tool
       const result = await vscode.lm.invokeTool(
         designContextTool.name,
-        params,
+        { 
+          input: params,
+          toolInvocationToken: ctx.toolInvocationToken
+        },
         ctx.cancellationToken
       );
+      console.log('[Helix] [FigmaService] ', result);
+      console.log('[Helix] [FigmaService] 📥 MCP tool invocation complete');
+      console.log('[Helix] [FigmaService] Result content parts:', result.content.length);
+      console.log('[Helix] [FigmaService] Result content types:', result.content.map((part: any) => part.constructor.name));
 
       // Collect result - LanguageModelToolResult.content is an array
       const content = result.content.map(part => {
         if (part instanceof vscode.LanguageModelTextPart) {
+          console.log('[Helix] [FigmaService] Text part length:', part.value.length);
+          console.log('[Helix] [FigmaService] Text part preview:', part.value.substring(0, 200));
           return part.value;
         }
+        console.log('[Helix] [FigmaService] Non-text part:', (part as any).constructor.name);
         return '';
       }).join('');
+
+      console.log('[Helix] [FigmaService] 📊 Final content length:', content.length);
+      console.log('[Helix] [FigmaService] Final content preview:', content.substring(0, 500));
+      console.log('[Helix] [FigmaService] Content is empty?:', content.length === 0);
+      console.log('[Helix] [FigmaService] Content is "Nothing is selected"?:', content.includes('Nothing is selected'));
 
       ctx.trace('service', 'figma-get-design-context-complete', {
         resultSize: content.length,
       });
+
+      console.log('[Helix] [FigmaService] ========== getDesignContext END ==========');
 
       return {
         ok: true,
         data: { content },
       };
     } catch (err) {
+      console.error('[Helix] [FigmaService] ❌ ERROR in getDesignContext');
+      console.error('[Helix] [FigmaService] Error message:', (err as Error).message);
+      console.error('[Helix] [FigmaService] Error stack:', (err as Error).stack);
+
       ctx.trace('service', 'figma-get-design-context-error', {
         error: (err as Error).message,
       });
@@ -163,7 +210,10 @@ export class FigmaService {
 
       const result = await vscode.lm.invokeTool(
         metadataTool.name,
-        params,
+        { 
+          input: params,
+          toolInvocationToken: ctx.toolInvocationToken 
+        },
         ctx.cancellationToken
       );
 
@@ -225,7 +275,10 @@ export class FigmaService {
 
       const result = await vscode.lm.invokeTool(
         screenshotTool.name,
-        params,
+        { 
+          input: params,
+          toolInvocationToken: ctx.toolInvocationToken 
+        },
         ctx.cancellationToken
       );
 
@@ -287,7 +340,10 @@ export class FigmaService {
 
       const result = await vscode.lm.invokeTool(
         variableTool.name,
-        params,
+        { 
+          input: params,
+          toolInvocationToken: ctx.toolInvocationToken 
+        },
         ctx.cancellationToken
       );
 
@@ -326,8 +382,7 @@ export class FigmaService {
 
     return {
       fileKey: fileKeyMatch?.[1],
-      // Convert 123-456 to 123:456 if needed
-      nodeId: nodeIdMatch?.[1]?.replace(/-/g, ':')
+      nodeId: nodeIdMatch?.[1]
     };
   }
 

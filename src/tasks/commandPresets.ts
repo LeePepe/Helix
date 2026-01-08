@@ -13,13 +13,6 @@ import { AgentExecutionPlan } from '../agents/IntentAnalyzerAgent';
  */
 export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
   {
-    agentName: 'FigmaAnalyzer',
-    executionOrder: 1,
-    parallelGroup: 1,
-    inputs: {},
-    dependencies: [],
-  },
-  {
     agentName: 'DesignSystemAnalyzer',
     executionOrder: 1,
     parallelGroup: 1,
@@ -27,16 +20,23 @@ export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
     dependencies: [],
   },
   {
-    agentName: 'Planner',
+    agentName: 'FigmaAnalyzer',
     executionOrder: 2,
     parallelGroup: 2,
+    inputs: {},
+    dependencies: ['DesignSystemAnalyzer'],
+  },
+  {
+    agentName: 'Planner',
+    executionOrder: 3,
+    parallelGroup: 3,
     inputs: {},
     dependencies: ['FigmaAnalyzer', 'DesignSystemAnalyzer'],
   },
   {
     agentName: 'CodeGenerator',
-    executionOrder: 3,
-    parallelGroup: 3,
+    executionOrder: 4,
+    parallelGroup: 4,
     inputs: {},
     dependencies: ['Planner'],
   },
@@ -48,13 +48,7 @@ export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
  * Step 2: Compare design vs implementation
  */
 export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
-  {
-    agentName: 'FigmaAnalyzer',
-    executionOrder: 1,
-    parallelGroup: 1,
-    inputs: {},
-    dependencies: [],
-  },
+
   {
     agentName: 'DesignSystemAnalyzer',
     executionOrder: 1,
@@ -63,9 +57,16 @@ export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
     dependencies: [],
   },
   {
-    agentName: 'Comparer',
+    agentName: 'FigmaAnalyzer',
     executionOrder: 2,
     parallelGroup: 2,
+    inputs: {},
+    dependencies: ['DesignSystemAnalyzer'],
+  },
+  {
+    agentName: 'Comparer',
+    executionOrder: 3,
+    parallelGroup: 3,
     inputs: {},
     dependencies: ['FigmaAnalyzer', 'DesignSystemAnalyzer'],
   },

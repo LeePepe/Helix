@@ -37,7 +37,8 @@ export class ExecutionContext {
     public readonly runId: string,
     public readonly workspaceInfo: WorkspaceInfo,
     public readonly settings: ExecutionSettings,
-    public readonly cancellationToken?: vscode.CancellationToken
+    public readonly cancellationToken?: vscode.CancellationToken,
+    public readonly toolInvocationToken?: vscode.ChatParticipantToolToken
   ) {
     // Listen to cancellation token if provided
     if (cancellationToken) {
@@ -156,7 +157,8 @@ export class ExecutionContextFactory {
   static create(
     workspaceInfo: WorkspaceInfo,
     settings: Partial<ExecutionSettings> = {},
-    cancellationToken?: vscode.CancellationToken
+    cancellationToken?: vscode.CancellationToken,
+    toolInvocationToken?: vscode.ChatParticipantToolToken
   ): ExecutionContext {
     const runId = `run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
@@ -168,6 +170,6 @@ export class ExecutionContextFactory {
       enableTelemetry: settings.enableTelemetry !== false,
       verbose: settings.verbose || false,      reportsPath: settings.reportsPath || 'reports',    };
 
-    return new ExecutionContext(runId, workspaceInfo, fullSettings, cancellationToken);
+    return new ExecutionContext(runId, workspaceInfo, fullSettings, cancellationToken, toolInvocationToken);
   }
 }
