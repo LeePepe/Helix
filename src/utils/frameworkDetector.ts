@@ -8,35 +8,41 @@ import * as path from 'path';
 export class FrameworkDetector {
 	/**
 	 * 检测项目使用的框架
-	 * @param designSystemGuide - 设计系统指南内容
+	 * @param designSystemGuide - 设计系统指南内容（可选）
 	 * @param workspaceRoot - 工作空间根目录
 	 * @returns 检测到的框架名称
 	 */
 	async detectFramework(
-		designSystemGuide: string,
-		workspaceRoot: string
+		designSystemGuide: string = '',
+		workspaceRoot?: string
 	): Promise<string | undefined> {
 		console.log('[Helix] FrameworkDetector - Starting framework detection...');
 
 		// 策略 A: 从 design-system-guide 中提取结构化配置
-		const configFramework = this.extractFromConfig(designSystemGuide);
-		if (configFramework) {
-			console.log('[Helix] FrameworkDetector - Found in structured config:', configFramework);
-			return configFramework;
+		if (designSystemGuide) {
+			const configFramework = this.extractFromConfig(designSystemGuide);
+			if (configFramework) {
+				console.log('[Helix] FrameworkDetector - Found in structured config:', configFramework);
+				return configFramework;
+			}
 		}
 
 		// 策略 B: 从文件系统检测
-		const fileSystemFramework = await this.detectFromFileSystem(workspaceRoot);
-		if (fileSystemFramework) {
-			console.log('[Helix] FrameworkDetector - Found from file system:', fileSystemFramework);
-			return fileSystemFramework;
+		if (workspaceRoot) {
+			const fileSystemFramework = await this.detectFromFileSystem(workspaceRoot);
+			if (fileSystemFramework) {
+				console.log('[Helix] FrameworkDetector - Found from file system:', fileSystemFramework);
+				return fileSystemFramework;
+			}
 		}
 
 		// 策略 C: 关键词匹配（fallback）
-		const keywordFramework = this.detectFromKeywords(designSystemGuide);
-		if (keywordFramework) {
-			console.log('[Helix] FrameworkDetector - Found from keywords:', keywordFramework);
-			return keywordFramework;
+		if (designSystemGuide) {
+			const keywordFramework = this.detectFromKeywords(designSystemGuide);
+			if (keywordFramework) {
+				console.log('[Helix] FrameworkDetector - Found from keywords:', keywordFramework);
+				return keywordFramework;
+			}
 		}
 
 		console.log('[Helix] FrameworkDetector - No framework detected');

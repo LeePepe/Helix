@@ -79,7 +79,7 @@ export class CodeGenerationAgent extends BaseAgent {
 			if (!figmaAnalysisResult.success || !figmaAnalysisResult.data) {
 				return {
 					success: false,
-					error: 'Failed to analyze Figma design'
+					error: figmaAnalysisResult.error || 'Failed to analyze Figma design'
 				};
 			}
 

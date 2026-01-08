@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { TaskHandler } from './commandHandlers/taskHandler';
+import { TaskOrchestrator } from './TaskOrchestrator';
 import { DesignSystemService } from '../services/designSystemService';
 import { FigmaService } from '../services/figmaService';
 import { PromptService } from '../services/promptService';
@@ -12,6 +13,7 @@ import { FrameworkDetector } from '../utils/frameworkDetector';
 
 export class HelixParticipant {
   private taskHandler: TaskHandler;
+  private taskOrchestrator: TaskOrchestrator;
   private designSystemService: DesignSystemService;
   private figmaService: FigmaService;
   private promptService: PromptService;
@@ -34,6 +36,9 @@ export class HelixParticipant {
 
     // Initialize new Agent system
     this.agentBootstrap = new AgentBootstrap();
+
+    // Initialize new task orchestrator
+    this.taskOrchestrator = new TaskOrchestrator();
 
     // Inject services into unified task handler
     this.taskHandler = new TaskHandler(
@@ -61,12 +66,12 @@ export class HelixParticipant {
       // Route based on slash command
       switch (request.command) {
         case 'fit-finish':
-          // Use new Agent system for fit-finish
-          await this.handleFitFinishWithAgents(request, stream, token);
+          // Use new refactored architecture
+          await this.taskOrchestrator.fitAndFinish(request, stream, token);
           break;
         case 'gen-code':
-          // Use new Agent system for gen-code
-          await this.handleGenCodeWithAgents(request, stream, token);
+          // Use new refactored architecture
+          await this.taskOrchestrator.buildFromFigma(request, stream, token);
           break;
         default:
           // No command specified - show help only if project was already initialized

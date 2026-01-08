@@ -17,17 +17,29 @@ export class CSSExtractor {
 	): Promise<Map<string, ExtractedValue>> {
 		const results = new Map<string, ExtractedValue>();
 
+		console.log('[CSSExtractor] Starting extraction...');
+		console.log('[CSSExtractor] Target CSS selectors:', this.config.cssSelectors);
+
 		if (!this.config.cssSelectors || this.config.cssSelectors.length === 0) {
+			console.log('[CSSExtractor] No CSS selectors configured, returning empty results');
 			return results;
 		}
+
+		console.log('[CSSExtractor] Processing', codeFiles.length, 'files');
 
 		for (const file of codeFiles) {
 			if (!file.content) {
 				continue;
 			}
 
+			console.log('[CSSExtractor] Extracting from file:', file.path);
 			// 提取文件中的样式
 			this.extractFromFile(file, results);
+		}
+
+		console.log('[CSSExtractor] Total extracted values:', results.size);
+		if (results.size > 0) {
+			console.log('[CSSExtractor] Extracted values:', Array.from(results.entries()).slice(0, 10));
 		}
 
 		return results;
@@ -103,6 +115,7 @@ export class CSSExtractor {
 
 			if (key && value && this.isTargetProperty(key)) {
 				const propertyKey = `${filePath}:${key}`;
+				console.log(`[Helix][CSSExtractor] Found inline style: ${key} = ${value} in ${filePath}`);
 				results.set(propertyKey, {
 					property: key,
 					value: value,
@@ -119,12 +132,15 @@ export class CSSExtractor {
 		// 简单的 CSS 属性提取 (property: value;)
 		const propertyRegex = /([a-z-]+)\s*:\s*([^;]+);/g;
 		let match;
+		let matchCount = 0;
 
 		while ((match = propertyRegex.exec(cssContent)) !== null) {
 			const [, key, value] = match;
+			matchCount++;
 
 			if (this.isTargetProperty(key)) {
 				const propertyKey = `${filePath}:${key}`;
+				console.log(`[Helix][CSSExtractor] Found CSS property: ${key} = ${value.trim()} in ${filePath}`);
 				results.set(propertyKey, {
 					property: key,
 					value: value.trim(),
@@ -132,6 +148,8 @@ export class CSSExtractor {
 				});
 			}
 		}
+
+		console.log(`[Helix][CSSExtractor] Scanned ${matchCount} CSS properties in ${filePath}`);
 	}
 
 	/**

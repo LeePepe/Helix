@@ -15,6 +15,7 @@ async function main() {
     outfile: 'dist/extension.js',
     external: ['vscode'],
     logLevel: 'info',
+    loader: { '.md': 'text' },
     plugins: [],
   });
 

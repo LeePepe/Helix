@@ -1,81 +1,183 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { ToolResult } from '../contracts';
+import { ExecutionContext } from '../runtime/ExecutionContext';
+import { ErrorCodes } from '../runtime/errors';
 
+/**
+ * File service for workspace file operations
+ * Unified service supporting both ExecutionContext (new) and direct calls (legacy)
+ */
 export class FileService {
   /**
-   * Read a file from the workspace
-   * @param relativePath Path relative to workspace root, or absolute path
+   * Read file content
    */
-  async readFile(relativePath: string): Promise<string> {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error('No workspace folder open');
-    }
-
-    // Determine if path is absolute or relative
-    let fileUri: vscode.Uri;
-    if (relativePath.startsWith('/') || relativePath.match(/^[a-zA-Z]:\\/)) {
-      // Absolute path
-      fileUri = vscode.Uri.file(relativePath);
-    } else {
-      // Relative path from workspace root
-      fileUri = vscode.Uri.joinPath(workspaceFolder.uri, relativePath);
-    }
-
+  async readFile(ctx: ExecutionContext, filePath: string): Promise<ToolResult> {
     try {
-      const fileContent = await vscode.workspace.fs.readFile(fileUri);
-      return Buffer.from(fileContent).toString('utf8');
-    } catch (error) {
-      throw new Error(`Failed to read file "${relativePath}": ${error instanceof Error ? error.message : String(error)}`);
+      ctx.trace('service', 'workspace-read-file', { filePath });
+
+      const content = await fs.readFile(filePath, 'utf-8');
+
+      return {
+        ok: true,
+        data: { filePath, content },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.WORKSPACE_READ_FAILED,
+          message: `Failed to read file: ${filePath}`,
+          details: (err as Error).message,
+        },
+      };
     }
   }
 
   /**
-   * Write a file to the workspace
-   * @param relativePath Path relative to workspace root, or absolute path
-   * @param content File content
+   * Write file content
    */
-  async writeFile(relativePath: string, content: string): Promise<void> {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      throw new Error('No workspace folder open');
-    }
-
-    // Determine if path is absolute or relative
-    let fileUri: vscode.Uri;
-    if (relativePath.startsWith('/') || relativePath.match(/^[a-zA-Z]:\\/)) {
-      // Absolute path
-      fileUri = vscode.Uri.file(relativePath);
-    } else {
-      // Relative path from workspace root
-      fileUri = vscode.Uri.joinPath(workspaceFolder.uri, relativePath);
-    }
-
+  async writeFile(
+    ctx: ExecutionContext,
+    filePath: string,
+    content: string
+  ): Promise<ToolResult> {
     try {
-      const buffer = Buffer.from(content, 'utf8');
-      await vscode.workspace.fs.writeFile(fileUri, buffer);
-    } catch (error) {
-      throw new Error(`Failed to write file "${relativePath}": ${error instanceof Error ? error.message : String(error)}`);
+      ctx.trace('service', 'workspace-write-file', { filePath, size: content.length });
+
+      // Ensure directory exists
+      const dir = path.dirname(filePath);
+      await fs.mkdir(dir, { recursive: true });
+
+      await fs.writeFile(filePath, content, 'utf-8');
+
+      return {
+        ok: true,
+        data: { filePath },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.WORKSPACE_WRITE_FAILED,
+          message: `Failed to write file: ${filePath}`,
+          details: (err as Error).message,
+        },
+      };
     }
   }
 
   /**
-   * Check if a file exists
+   * Apply a patch/diff to a file
    */
-  async fileExists(relativePath: string): Promise<boolean> {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) {
-      return false;
-    }
-
-    let fileUri: vscode.Uri;
-    if (relativePath.startsWith('/') || relativePath.match(/^[a-zA-Z]:\\/)) {
-      fileUri = vscode.Uri.file(relativePath);
-    } else {
-      fileUri = vscode.Uri.joinPath(workspaceFolder.uri, relativePath);
-    }
-
+  async applyPatch(
+    ctx: ExecutionContext,
+    filePath: string,
+    diff: string
+  ): Promise<ToolResult> {
     try {
-      await vscode.workspace.fs.stat(fileUri);
+      ctx.trace('service', 'workspace-apply-patch', { filePath, diffSize: diff.length });
+
+      // TODO: Implement proper patch application
+      // For now, this is a placeholder that would need a proper diff library
+      
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.WORKSPACE_WRITE_FAILED,
+          message: 'Patch application not yet implemented',
+          details: 'Use writeFile with full content for now',
+        },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.WORKSPACE_WRITE_FAILED,
+          message: `Failed to apply patch: ${filePath}`,
+          details: (err as Error).message,
+        },
+      };
+    }
+  }
+
+  /**
+   * Search for files matching a pattern
+   */
+  async findFiles(
+    ctx: ExecutionContext,
+    pattern: string,
+    exclude?: string
+  ): Promise<ToolResult> {
+    try {
+      ctx.trace('service', 'workspace-find-files', { pattern, exclude });
+
+      const files = await vscode.workspace.findFiles(
+        pattern,
+        exclude,
+        100 // limit
+      );
+
+      return {
+        ok: true,
+        data: {
+          files: files.map(uri => uri.fsPath),
+        },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.WORKSPACE_READ_FAILED,
+          message: `Failed to find files: ${pattern}`,
+          details: (err as Error).message,
+        },
+      };
+    }
+  }
+
+  /**
+   * Open a document in the editor
+   */
+  async openDocument(ctx: ExecutionContext, filePath: string): Promise<ToolResult> {
+    try {
+      ctx.trace('service', 'workspace-open-document', { filePath });
+
+      const uri = vscode.Uri.file(filePath);
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document);
+
+      return {
+        ok: true,
+        data: { filePath },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.WORKSPACE_READ_FAILED,
+          message: `Failed to open document: ${filePath}`,
+          details: (err as Error).message,
+        },
+      };
+    }
+  }
+
+  /**
+   * Get workspace root path
+   */
+  getWorkspaceRoot(): string | undefined {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    return workspaceFolders?.[0]?.uri.fsPath;
+  }
+
+  /**
+   * Check if file exists
+   */
+  async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath);
       return true;
     } catch {
       return false;
@@ -83,9 +185,33 @@ export class FileService {
   }
 
   /**
-   * Get the workspace root path
+   * List directory contents
    */
-  getWorkspaceRoot(): string | undefined {
-    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  async listDirectory(ctx: ExecutionContext, dirPath: string): Promise<ToolResult> {
+    try {
+      ctx.trace('service', 'workspace-list-directory', { dirPath });
+
+      const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+      return {
+        ok: true,
+        data: {
+          entries: entries.map(entry => ({
+            name: entry.name,
+            isDirectory: entry.isDirectory(),
+            path: path.join(dirPath, entry.name),
+          })),
+        },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.WORKSPACE_READ_FAILED,
+          message: `Failed to list directory: ${dirPath}`,
+          details: (err as Error).message,
+        },
+      };
+    }
   }
 }

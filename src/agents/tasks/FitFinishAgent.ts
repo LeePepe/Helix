@@ -70,7 +70,7 @@ export class FitFinishAgent extends BaseAgent {
 			if (!figmaAnalysisResult.success || !figmaAnalysisResult.data) {
 				return {
 					success: false,
-					error: 'Failed to analyze Figma design'
+					error: figmaAnalysisResult.error || 'Failed to analyze Figma design'
 				};
 			}
 
@@ -85,6 +85,17 @@ export class FitFinishAgent extends BaseAgent {
 			const figmaData = figmaAnalysis.rawData;
 			const designSystemGuide = designSystemResult.data;
 
+			console.log('[HELIX][FitFinishAgent] ========== Data Collection Complete ==========');
+			console.log('[HELIX][FitFinishAgent] figmaAnalysis received, component types:', figmaAnalysis.componentTypes?.length || 0);
+			console.log('[HELIX][FitFinishAgent] Extracted figmaData (rawData) from analysis');
+			console.log('[HELIX][FitFinishAgent] figmaData type:', typeof figmaData);
+			console.log('[HELIX][FitFinishAgent] figmaData is string?', typeof figmaData === 'string');
+			console.log('[HELIX][FitFinishAgent] figmaData length/keys:',
+				typeof figmaData === 'string' ? figmaData.length : (figmaData ? Object.keys(figmaData).length : 'null'));
+			console.log('[HELIX][FitFinishAgent] figmaData preview (first 300 chars):',
+				typeof figmaData === 'string' ? figmaData.substring(0, 300) : JSON.stringify(figmaData, null, 2).substring(0, 300));
+			console.log('[HELIX][FitFinishAgent] isMetadataOnly flag from FigmaAnalyzer:', figmaAnalysisResult.metadata?.isMetadataOnly);
+
 			// 解析 tokens
 			const designSystemTokens = this.designSystemAgent.parseTokens(designSystemGuide);
 
@@ -93,7 +104,6 @@ export class FitFinishAgent extends BaseAgent {
 			this.streamMarkdown(`- Figma 设计分析 ✓\n`, input.context);
 			this.streamMarkdown(`- 设计系统指南 ✓\n`, input.context);
 			this.streamMarkdown(`- 代码文件加载 ✓\n`, input.context);
-			this.streamMarkdown(`\n## 📋 设计系统指南\n\n${designSystemGuide}\n`, input.context);
 
 			// Step 2: 调用 PlannerAgent 生成执行计划
 			this.streamMarkdown(`\n## 🗺️ 生成执行计划\n\n`, input.context);
@@ -128,6 +138,14 @@ export class FitFinishAgent extends BaseAgent {
 			// Step 3: 并行执行维度检查
 			this.streamMarkdown(`\n## 🔍 执行一致性检查（并行）\n\n`, input.context);
 			this.streamProgress('⚡ Parallel execution: Running consistency checks...', input.context);
+
+			console.log('[HELIX][FitFinishAgent] ========== Passing data to orchestrator ==========');
+			console.log('[HELIX][FitFinishAgent] figmaData type:', typeof figmaData);
+			console.log('[HELIX][FitFinishAgent] figmaData preview (first 200 chars):',
+				typeof figmaData === 'string' ? figmaData.substring(0, 200) : JSON.stringify(figmaData, null, 2).substring(0, 200));
+			console.log('[HELIX][FitFinishAgent] codeFiles count:', files?.length || 0);
+			console.log('[HELIX][FitFinishAgent] Execution plan dimensions:', executionPlan.dimensions?.length || 0);
+			console.log('[HELIX][FitFinishAgent] Execution plan parallel groups:', executionPlan.parallelGroups?.length || 0);
 
 			const checksStartTime = Date.now();
 			const aggregatedResult = await this.orchestrator.execute(executionPlan, {

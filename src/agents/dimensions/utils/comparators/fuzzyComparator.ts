@@ -18,12 +18,21 @@ export class FuzzyComparator {
 		const differences: Difference[] = [];
 		const tolerance = this.config.tolerance || 0;
 
+		console.log(`[Helix][FuzzyComparator] Starting comparison for ${dimension} with tolerance: ${tolerance}`);
+		console.log(`[Helix][FuzzyComparator] Figma values count: ${figmaValues.size}`);
+		console.log(`[Helix][FuzzyComparator] Code values count: ${codeValues.size}`);
+
 		// 检查 Figma 中的每个值
 		for (const [property, figmaValue] of figmaValues.entries()) {
 			const codeValue = codeValues.get(property);
 
+			console.log(`[Helix]\n[FuzzyComparator] Checking property: ${property}`);
+			console.log(`[Helix][FuzzyComparator]   Figma value: ${figmaValue.value}`);
+			console.log(`[Helix][FuzzyComparator]   Code value: ${codeValue ? codeValue.value : 'NOT FOUND'}`);
+
 			if (!codeValue) {
 				// 代码中缺失
+				console.log(`[Helix][FuzzyComparator]   ❌ Missing in code`);
 				differences.push({
 					category: dimension,
 					severity: 'critical',
@@ -32,21 +41,30 @@ export class FuzzyComparator {
 					codeValue: null,
 					fix: `Add ${property}: ${figmaValue.value} to design system`
 				});
-			} else if (!this.isSimilar(figmaValue.value, codeValue.value, tolerance)) {
-				// 值不匹配（超出容差）
-				const diff = this.calculateDifference(figmaValue.value, codeValue.value);
-				differences.push({
-					category: dimension,
-					severity: this.getSeverity(diff, tolerance),
-					property,
-					figmaValue: figmaValue.value,
-					codeValue: codeValue.value,
-					fix: `Change ${property} from ${codeValue.value} to ${figmaValue.value} (diff: ${(diff * 100).toFixed(1)}%)`,
-					location: codeValue.location
-				});
+			} else {
+				const isSimilar = this.isSimilar(figmaValue.value, codeValue.value, tolerance);
+				console.log(`[Helix][FuzzyComparator]   Similar? ${isSimilar}`);
+
+				if (!isSimilar) {
+					// 值不匹配（超出容差）
+					const diff = this.calculateDifference(figmaValue.value, codeValue.value);
+					console.log(`[Helix][FuzzyComparator]   ❌ Difference: ${(diff * 100).toFixed(1)}%`);
+					differences.push({
+						category: dimension,
+						severity: this.getSeverity(diff, tolerance),
+						property,
+						figmaValue: figmaValue.value,
+						codeValue: codeValue.value,
+						fix: `Change ${property} from ${codeValue.value} to ${figmaValue.value} (diff: ${(diff * 100).toFixed(1)}%)`,
+						location: codeValue.location
+					});
+				} else {
+					console.log(`[Helix][FuzzyComparator]   ✅ Match`);
+				}
 			}
 		}
 
+		console.log(`[Helix]\n[FuzzyComparator] Total differences found: ${differences.length}`);
 		return differences;
 	}
 

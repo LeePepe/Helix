@@ -20,7 +20,7 @@ export class DesignSystemService {
    */
   async loadGuideContent(): Promise<string> {
     const configPath = this.configService.getDesignSystemPath();
-    console.log(`Loading design system guide from path: ${configPath}`);
+    console.log(`[Helix]Loading design system guide from path: ${configPath}`);
     
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
@@ -32,7 +32,7 @@ export class DesignSystemService {
 
     try {
       const fileContent = await vscode.workspace.fs.readFile(designSystemUri);
-      console.log(`Design system guide loaded from: ${this.designSystemPath}`);
+      console.log(`[Helix]Design system guide loaded from: ${this.designSystemPath}`);
       return Buffer.from(fileContent).toString('utf8');
     } catch (error) {
       throw new Error(
@@ -47,7 +47,7 @@ export class DesignSystemService {
    */
   async checkDesignSystemExists(): Promise<boolean> {
     const configPath = this.configService.getDesignSystemPath();
-    console.log(`Checking for design system guide at path: ${configPath}`);
+    console.log(`[Helix]Checking for design system guide at path: ${configPath}`);
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
@@ -135,7 +135,7 @@ export class DesignSystemService {
     const fileContent = Buffer.from(content, 'utf8');
     await vscode.workspace.fs.writeFile(designSystemUri, fileContent);
 
-    console.log(`Design system guide saved to: ${this.designSystemPath}`);
+    console.log(`[Helix]Design system guide saved to: ${this.designSystemPath}`);
   }
 
 

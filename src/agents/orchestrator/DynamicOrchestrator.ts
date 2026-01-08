@@ -18,11 +18,24 @@ export class DynamicOrchestrator {
 	 * 执行完整的执行计划
 	 */
 	async execute(plan: ExecutionPlan, baseInput: AgentInput): Promise<AggregatedResult> {
+		console.log('[HELIX][DynamicOrchestrator] ========== Starting execution ==========');
+		console.log('[HELIX][DynamicOrchestrator] Parallel groups count:', plan.parallelGroups.length);
+		console.log('[HELIX][DynamicOrchestrator] Total dimensions:', plan.dimensions.length);
+		console.log('[HELIX][DynamicOrchestrator] baseInput.data keys:', Object.keys(baseInput.data));
+		console.log('[HELIX][DynamicOrchestrator] figmaData type:', typeof baseInput.data.figmaData);
+		console.log('[HELIX][DynamicOrchestrator] figmaData preview (first 200 chars):',
+			typeof baseInput.data.figmaData === 'string'
+				? baseInput.data.figmaData.substring(0, 200)
+				: JSON.stringify(baseInput.data.figmaData, null, 2).substring(0, 200));
+		console.log('[HELIX][DynamicOrchestrator] codeFiles count:', baseInput.data.codeFiles?.length || 0);
+
 		const results = new Map<string, AgentOutput>();
 
 		// 按并行组执行
 		for (let i = 0; i < plan.parallelGroups.length; i++) {
 			const group = plan.parallelGroups[i];
+
+			console.log(`[Helix][DynamicOrchestrator] Executing group ${i + 1}, agents:`, group.map(t => t.id).join(', '));
 
 			// 流式输出进度
 			baseInput.context.stream.progress(
@@ -32,6 +45,8 @@ export class DynamicOrchestrator {
 			const groupResults = await this.executeParallelGroup(group, baseInput, results);
 			groupResults.forEach((result, id) => results.set(id, result));
 		}
+
+		console.log('[HELIX][DynamicOrchestrator] All groups executed, aggregating results...');
 
 		// 聚合结果
 		const aggregator = new ResultAggregator();

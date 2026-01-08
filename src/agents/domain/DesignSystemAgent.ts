@@ -59,7 +59,7 @@ export class DesignSystemAgent extends BaseAgent {
 		for (const filePath of possiblePaths) {
 			if (fs.existsSync(filePath)) {
 				const content = fs.readFileSync(filePath, 'utf8');
-				console.log(`[DesignSystemAgent] Loaded design system from: ${filePath}`);
+				console.log(`[Helix][DesignSystemAgent] Loaded design system from: ${filePath}`);
 				return content;
 			}
 		}

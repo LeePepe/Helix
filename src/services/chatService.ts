@@ -85,7 +85,7 @@ export class ChatService {
 
     const assistantMsg = vscode.LanguageModelChatMessage.Assistant(contentParts);
     messages.push(assistantMsg);
-    console.log(`Executing ${toolCalls.length} tool calls...`);
+    console.log(`[Helix]Executing ${toolCalls.length} tool calls...`);
     console.log('Tool Calls:', toolCalls.map(tc => tc.name).join(', '));
     const toolResults = await this.executeToolCalls(toolCalls, request, stream, token);
 

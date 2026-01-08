@@ -27,9 +27,29 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 		try {
 			const { figmaData, codeFiles, designSystemTokens, config: runtimeConfig } = input.data;
 
+			console.log(`[Helix][HELIX][${this.config.name} Check] ========== Starting ${this.config.name} check ==========`);
+			console.log(`[Helix][HELIX][${this.config.name} Check] Input data keys:`, Object.keys(input.data));
+			console.log(`[Helix][HELIX][${this.config.name} Check] figmaData type:`, typeof figmaData);
+			console.log(`[Helix][HELIX][${this.config.name} Check] figmaData value (first 500 chars):`,
+				typeof figmaData === 'string' ? figmaData.substring(0, 500) : JSON.stringify(figmaData, null, 2).substring(0, 500));
+			console.log(`[Helix][HELIX][${this.config.name} Check] codeFiles count:`, codeFiles?.length || 0);
+
+			// 验证输入
+			if (!codeFiles || codeFiles.length === 0) {
+				const warningMsg = `No code files provided for ${this.config.name} check. Please ensure code files are included in the input.`;
+				console.warn(`[HELIX][${this.config.name} Check] ⚠️`, warningMsg);
+				throw new Error(warningMsg);
+			}
+
 			// 1. 提取 Figma 数据
 			this.streamProgress(`Extracting ${this.config.name} from Figma...`, input.context);
+			console.log(`[Helix][HELIX][${this.config.name} Check] Calling extractFigmaValues for dimension:`, this.config.name);
 			const figmaValues = this.extractFigmaValues(figmaData, this.config.name);
+
+			if (figmaValues.size === 0) {
+				const warningMsg = `No ${this.config.name} values found in Figma data. The design may not have ${this.config.name} properties, or the node could not be accessed.`;
+				console.warn(`[HELIX][${this.config.name} Check] ⚠️`, warningMsg);
+			}
 
 			// 2. 提取代码数据
 			this.streamProgress(`Extracting ${this.config.name} from code...`, input.context);
@@ -38,6 +58,11 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 				designSystemTokens,
 				runtimeConfig
 			);
+
+			if (codeValues.size === 0) {
+				const warningMsg = `No ${this.config.name} values found in code. The code files may not contain ${this.config.name} properties, or extraction failed.`;
+				console.warn(`[HELIX][${this.config.name} Check] ⚠️`, warningMsg);
+			}
 
 			// 3. 规范化数据
 			let normalizedFigmaValues = figmaValues;
@@ -55,12 +80,21 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 
 			// 4. 对比
 			this.streamProgress(`Comparing ${this.config.name} values...`, input.context);
+			console.log(`[Helix][Spacing Check] Starting comparison for ${this.config.name}...`);
+			console.log(`[Helix][Spacing Check] Normalized Figma values (${normalizedFigmaValues.size}):`, Array.from(normalizedFigmaValues.entries()));
+			console.log(`[Helix][Spacing Check] Normalized Code values (${normalizedCodeValues.size}):`, Array.from(normalizedCodeValues.entries()));
+
 			const comparator = this.comparatorFactory.create(this.config.comparator);
 			const differences = comparator.compare(
 				normalizedFigmaValues,
 				normalizedCodeValues,
 				this.config.name
 			);
+
+			console.log(`[Helix][Spacing Check] Comparison found ${differences.length} differences`);
+			if (differences.length > 0) {
+				console.log('[HELIX][Spacing Check] Differences:', JSON.stringify(differences, null, 2));
+			}
 
 			// 5. 计算匹配率
 			const totalChecks = figmaValues.size;
@@ -94,29 +128,43 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 	private extractFigmaValues(figmaData: any, dimension: string): Map<string, ExtractedValue> {
 		const values = new Map<string, ExtractedValue>();
 
+		console.log(`[Helix][HELIX][${dimension} Check] extractFigmaValues called`);
+		console.log(`[Helix][HELIX][${dimension} Check] figmaData is null/undefined?`, !figmaData);
+
 		if (!figmaData) {
+			console.log(`[Helix][HELIX][${dimension} Check] figmaData is empty, returning empty values`);
 			return values;
 		}
+
+		console.log(`[Helix][HELIX][${dimension} Check] Switching on dimension type: ${dimension}`);
 
 		// 根据维度类型提取对应数据
 		switch (dimension) {
 			case 'color':
+				console.log(`[Helix][HELIX][${dimension} Check] Calling extractFigmaColors`);
 				this.extractFigmaColors(figmaData, values);
 				break;
 			case 'typography':
+				console.log(`[Helix][HELIX][${dimension} Check] Calling extractFigmaTypography`);
 				this.extractFigmaTypography(figmaData, values);
 				break;
 			case 'spacing':
+				console.log(`[Helix][HELIX][${dimension} Check] Calling extractFigmaSpacing`);
 				this.extractFigmaSpacing(figmaData, values);
 				break;
 			case 'borderRadius':
+				console.log(`[Helix][HELIX][${dimension} Check] Calling extractFigmaBorderRadius`);
 				this.extractFigmaBorderRadius(figmaData, values);
 				break;
 			case 'shadow':
+				console.log(`[Helix][HELIX][${dimension} Check] Calling extractFigmaShadow`);
 				this.extractFigmaShadow(figmaData, values);
 				break;
+			default:
+				console.log(`[Helix][HELIX][${dimension} Check] ⚠️ Unknown dimension type: ${dimension}`);
 		}
 
+		console.log(`[Helix][HELIX][${dimension} Check] extractFigmaValues completed, extracted ${values.size} values`);
 		return values;
 	}
 
@@ -197,7 +245,23 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 	 * 提取 Figma 间距
 	 */
 	private extractFigmaSpacing(figmaData: any, values: Map<string, ExtractedValue>): void {
+		console.log('[HELIX][Spacing Check] Extracting Figma spacing from data:', JSON.stringify(figmaData, null, 2));
+
+		// 检查 figmaData 是否有效
+		if (typeof figmaData === 'string') {
+			const errorMsg = `Figma node access failed: ${figmaData}`;
+			console.error('[HELIX][Spacing Check] ❌', errorMsg);
+			throw new Error(errorMsg);
+		}
+
+		if (!figmaData || typeof figmaData !== 'object') {
+			const errorMsg = `Invalid Figma data received. Expected object, got ${typeof figmaData}`;
+			console.error('[HELIX][Spacing Check] ❌', errorMsg);
+			throw new Error(errorMsg);
+		}
+
 		if (figmaData.paddingLeft !== undefined) {
+			console.log('[HELIX][Spacing Check] Found paddingLeft:', figmaData.paddingLeft);
 			values.set('padding-left', {
 				property: 'padding-left',
 				value: `${figmaData.paddingLeft}px`,
@@ -206,6 +270,7 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 		}
 
 		if (figmaData.paddingRight !== undefined) {
+			console.log('[HELIX][Spacing Check] Found paddingRight:', figmaData.paddingRight);
 			values.set('padding-right', {
 				property: 'padding-right',
 				value: `${figmaData.paddingRight}px`,
@@ -214,6 +279,7 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 		}
 
 		if (figmaData.paddingTop !== undefined) {
+			console.log('[HELIX][Spacing Check] Found paddingTop:', figmaData.paddingTop);
 			values.set('padding-top', {
 				property: 'padding-top',
 				value: `${figmaData.paddingTop}px`,
@@ -222,6 +288,7 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 		}
 
 		if (figmaData.paddingBottom !== undefined) {
+			console.log('[HELIX][Spacing Check] Found paddingBottom:', figmaData.paddingBottom);
 			values.set('padding-bottom', {
 				property: 'padding-bottom',
 				value: `${figmaData.paddingBottom}px`,
@@ -230,12 +297,15 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 		}
 
 		if (figmaData.itemSpacing !== undefined) {
+			console.log('[HELIX][Spacing Check] Found itemSpacing (gap):', figmaData.itemSpacing);
 			values.set('gap', {
 				property: 'gap',
 				value: `${figmaData.itemSpacing}px`,
 				location: 'figma'
 			});
 		}
+
+		console.log('[HELIX][Spacing Check] Total Figma spacing values extracted:', values.size);
 	}
 
 	/**
@@ -290,14 +360,28 @@ export class ToolDrivenConsistencyAgent extends BaseAgent {
 		designSystemTokens: any,
 		runtimeConfig?: Record<string, any>
 	): Promise<Map<string, ExtractedValue>> {
+		console.log(`[Helix][Spacing Check] Extracting ${this.config.name} from code...`);
+		console.log(`[Helix][Spacing Check] Code files count:`, codeFiles.length);
+		console.log(`[Helix][Spacing Check] Primary extractor type:`, this.config.extractor.type);
+
 		// 首先尝试使用主提取器
 		const primaryExtractor = this.extractorFactory.create(this.config.extractor);
 		let values = await primaryExtractor.extract(codeFiles, designSystemTokens, runtimeConfig);
 
+		console.log(`[Helix][Spacing Check] Primary extractor (${this.config.extractor.type}) found ${values.size} values`);
+		if (values.size > 0) {
+			console.log('[HELIX][Spacing Check] Primary extractor values:', Array.from(values.entries()));
+		}
+
 		// 如果主提取器没有结果，且有 fallback，尝试 fallback
 		if (values.size === 0 && this.config.extractor.fallback) {
+			console.log(`[Helix][Spacing Check] Trying fallback extractor (${this.config.extractor.fallback.type})...`);
 			const fallbackExtractor = this.extractorFactory.create(this.config.extractor.fallback);
 			values = await fallbackExtractor.extract(codeFiles, designSystemTokens, runtimeConfig);
+			console.log(`[Helix][Spacing Check] Fallback extractor found ${values.size} values`);
+			if (values.size > 0) {
+				console.log('[HELIX][Spacing Check] Fallback extractor values:', Array.from(values.entries()));
+			}
 		}
 
 		return values;

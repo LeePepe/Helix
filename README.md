@@ -23,6 +23,14 @@ Generate production-ready code from Figma designs with:
 - Theme support (light/dark)
 - Best practices and patterns
 
+## Quick Start
+
+1. **Select a Figma element** in Figma Desktop (or provide a URL)
+2. **Open VSCode Chat** and type `@helix`
+3. **Run a command**:
+   - `@helix /fit-finish src/components/Button.swift` - Compare design with code
+   - `@helix /gen-code` - Generate new code from design
+
 ## Installation
 
 ### From Marketplace (Coming Soon)

@@ -50,26 +50,101 @@ export class FigmaAnalyzerAgent extends BaseAgent {
 		try {
 			const { figmaUrl, userRequest } = input.data;
 
+			console.log('[HELIX][FigmaAnalyzerAgent] ========== Starting Figma Analysis ==========');
+			console.log('[HELIX][FigmaAnalyzerAgent] figmaUrl:', figmaUrl);
+			console.log('[HELIX][FigmaAnalyzerAgent] userRequest:', userRequest);
+
 			this.streamProgress('Fetching Figma design data...', input.context);
 
 			// Step 1: 获取 Figma 原始数据
 			const figmaData = await this.figmaService.getDesignContext(figmaUrl);
 
+			console.log('[HELIX][FigmaAnalyzerAgent] Received figmaData from FigmaService');
+			console.log('[HELIX][FigmaAnalyzerAgent] figmaData type:', typeof figmaData);
+			console.log('[HELIX][FigmaAnalyzerAgent] figmaData keys:', figmaData ? Object.keys(figmaData).slice(0, 20) : 'null');
+			console.log('[HELIX][FigmaAnalyzerAgent] _isMetadata flag:', figmaData?._isMetadata);
+
 			if (!figmaData) {
+				console.error('[HELIX][FigmaAnalyzerAgent] ❌ No figmaData received');
 				return {
 					success: false,
 					error: 'Failed to fetch Figma design data'
 				};
 			}
 
-			this.streamMarkdown(`\n## 🎨 Figma 设计内容分析\n\n`, input.context);
+			// Check if we got metadata-only response (design too large)
+			if (figmaData._isMetadata) {
+				this.streamProgress('Design is large, extracting detailed node info...', input.context);
+				console.log('[HELIX][FigmaAnalyzerAgent] Received metadata-only response, extracting sub-nodes');
+				console.log('[HELIX][FigmaAnalyzerAgent] XML content length:', figmaData._xmlContent?.length || 0);
+
+				// Extract node IDs from XML metadata
+				const nodeIds = this.extractNodeIdsFromXML(figmaData._xmlContent);
+				console.log('[HELIX][FigmaAnalyzerAgent] Extracted node IDs from XML:', nodeIds.length);
+
+				// Fetch detailed data for the first few leaf nodes (instances/components)
+				// Focus on instances as they usually contain the actual spacing/styling info
+				const detailedNodes = await this.fetchDetailedNodes(figmaUrl, nodeIds.slice(0, 5), input.context);
+				console.log('[HELIX][FigmaAnalyzerAgent] Fetched detailed data for', detailedNodes.length, 'nodes');
+
+				// If we got at least one detailed node, use it for spacing check
+				if (detailedNodes.length > 0) {
+					console.log('[HELIX][FigmaAnalyzerAgent] Using first detailed node for analysis');
+					const firstNode = detailedNodes[0];
+
+					// Simple analysis since we have actual node data
+					return {
+						success: true,
+						data: {
+							summary: `Large design with ${nodeIds.length} nodes. Using first instance for spacing check.`,
+							componentTypes: [{
+								name: firstNode.name || 'Component',
+								nodeId: firstNode.id || '',
+								description: 'Selected node for spacing analysis'
+							}],
+							patterns: [],
+							recommendations: ['Check spacing values against this component instance'],
+							rawData: firstNode  // Use the detailed node data
+						},
+						metadata: {
+							executionMode: 'tool',
+							agentName: this.name,
+							isMetadataOnly: false
+						}
+					};
+				}
+
+				// Fallback: Return XML as before if detailed fetch failed
+				console.log('[HELIX][FigmaAnalyzerAgent] Could not fetch detailed nodes, using XML metadata');
+				return {
+					success: true,
+					data: {
+						summary: `Large design with ${nodeIds.length} nodes. XML metadata only.`,
+						componentTypes: [],
+						patterns: [],
+						recommendations: ['Select a specific component node for spacing analysis'],
+						rawData: figmaData._xmlContent
+					},
+					metadata: {
+						executionMode: 'tool',
+						agentName: this.name,
+						isMetadataOnly: true
+					}
+				};
+			}
+
 			this.streamProgress('Analyzing design structure and patterns...', input.context);
+
+			console.log('[HELIX][FigmaAnalyzerAgent] Using full JSON figmaData for analysis');
+			console.log('[HELIX][FigmaAnalyzerAgent] figmaData preview (first 500 chars):',
+				JSON.stringify(figmaData, null, 2).substring(0, 500));
 
 			// Step 2: 使用 LLM 分析 Figma 内容
 			const analysis = await this.analyzeFigmaContent(figmaData, userRequest, input.context);
 
-			// Step 3: 显示分析结果
-			this.displayAnalysis(analysis, input.context);
+			console.log('[HELIX][FigmaAnalyzerAgent] Analysis complete (JSON mode)');
+			console.log('[HELIX][FigmaAnalyzerAgent] Component types found:', analysis.componentTypes?.length || 0);
+			console.log('[HELIX][FigmaAnalyzerAgent] Returning rawData as JSON');
 
 			return {
 				success: true,
@@ -80,6 +155,7 @@ export class FigmaAnalyzerAgent extends BaseAgent {
 				}
 			};
 		} catch (error: any) {
+			console.error('[HELIX][FigmaAnalyzerAgent] ❌ Error during execution:', error.message);
 			return this.handleError(error);
 		}
 	}
@@ -200,45 +276,81 @@ Return ONLY the JSON object, no additional text or markdown code blocks.`;
 	}
 
 	/**
-	 * 显示分析结果
+	 * 从XML元数据中提取节点ID
 	 */
-	private displayAnalysis(analysis: FigmaAnalysis, context: any): void {
-		this.streamMarkdown(`\n### 📊 分析摘要\n\n`, context);
-		this.streamMarkdown(`${analysis.summary}\n\n`, context);
+	private extractNodeIdsFromXML(xmlContent: string): Array<{id: string, type: string, name: string}> {
+		const nodeIds: Array<{id: string, type: string, name: string}> = [];
 
-		if (analysis.componentTypes.length > 0) {
-			this.streamMarkdown(`### 🎯 识别的组件类型 (${analysis.componentTypes.length})\n\n`, context);
-			analysis.componentTypes.forEach((type, index) => {
-				this.streamMarkdown(`**${index + 1}. ${type.name}**\n`, context);
-				this.streamMarkdown(`- ${type.description}\n`, context);
-				if (type.nodeId) {
-					this.streamMarkdown(`- Node ID: \`${type.nodeId}\`\n`, context);
-				}
-				if (type.variants && type.variants.length > 0) {
-					this.streamMarkdown(`- Variants: ${type.variants.map(v => `${v.property}="${v.value}"`).join(', ')}\n`, context);
-				}
-				this.streamMarkdown(`\n`, context);
+		// 正则匹配 <frame id="..." name="..."> 和 <instance id="..." name="...">
+		const frameRegex = /<frame id="([^"]+)" name="([^"]+)"/g;
+		const instanceRegex = /<instance id="([^"]+)" name="([^"]+)"/g;
+
+		let match;
+
+		// 优先提取 instance (通常是组件实例,包含实际样式)
+		while ((match = instanceRegex.exec(xmlContent)) !== null) {
+			nodeIds.push({
+				id: match[1],
+				type: 'instance',
+				name: match[2]
 			});
 		}
 
-		if (analysis.patterns.length > 0) {
-			this.streamMarkdown(`### 🔍 设计模式\n\n`, context);
-			analysis.patterns.forEach(pattern => {
-				this.streamMarkdown(`**${pattern.pattern}**\n`, context);
-				this.streamMarkdown(`- ${pattern.description}\n`, context);
-				if (pattern.examples.length > 0) {
-					this.streamMarkdown(`- Examples: ${pattern.examples.join(', ')}\n`, context);
-				}
-				this.streamMarkdown(`\n`, context);
-			});
+		// 如果没有 instance,提取 frame
+		if (nodeIds.length === 0) {
+			while ((match = frameRegex.exec(xmlContent)) !== null) {
+				nodeIds.push({
+					id: match[1],
+					type: 'frame',
+					name: match[2]
+				});
+			}
 		}
 
-		if (analysis.recommendations.length > 0) {
-			this.streamMarkdown(`### 💡 实现建议\n\n`, context);
-			analysis.recommendations.forEach(rec => {
-				this.streamMarkdown(`- ${rec}\n`, context);
-			});
-			this.streamMarkdown(`\n`, context);
-		}
+		return nodeIds;
 	}
+
+	/**
+	 * 获取详细节点数据
+	 */
+	private async fetchDetailedNodes(
+		figmaUrl: string,
+		nodeInfos: Array<{id: string, type: string, name: string}>,
+		_context: any
+	): Promise<any[]> {
+		const detailedNodes: any[] = [];
+
+		console.log('[HELIX][FigmaAnalyzerAgent] Fetching detailed data for nodes:', nodeInfos.map(n => n.name).join(', '));
+
+		// 解析 fileKey
+		const urlMatch = figmaUrl.match(/figma\.com\/(?:file|design)\/([^/?]+)/);
+		if (!urlMatch) {
+			console.error('[HELIX][FigmaAnalyzerAgent] Could not extract fileKey from URL');
+			return detailedNodes;
+		}
+		const fileKey = urlMatch[1];
+
+		// 逐个获取节点详细信息
+		for (const nodeInfo of nodeInfos) {
+			try {
+				console.log(`[HELIX][FigmaAnalyzerAgent] Fetching node ${nodeInfo.id} (${nodeInfo.name})...`);
+
+				// 构造新的URL用于获取这个特定节点
+				const nodeUrl = `https://www.figma.com/design/${fileKey}/?node-id=${nodeInfo.id}`;
+				const nodeData = await this.figmaService.getDesignContext(nodeUrl);
+
+				if (nodeData && !nodeData._isMetadata) {
+					console.log(`[HELIX][FigmaAnalyzerAgent] ✅ Got detailed data for ${nodeInfo.name}`);
+					detailedNodes.push(nodeData);
+				} else {
+					console.log(`[HELIX][FigmaAnalyzerAgent] ⚠️ Node ${nodeInfo.name} still returned metadata`);
+				}
+			} catch (error: any) {
+				console.error(`[HELIX][FigmaAnalyzerAgent] ❌ Failed to fetch node ${nodeInfo.id}:`, error.message);
+			}
+		}
+
+		return detailedNodes;
+	}
+
 }
