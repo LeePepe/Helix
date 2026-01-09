@@ -16,7 +16,9 @@ export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
     agentName: 'DesignSystemAnalyzer',
     executionOrder: 1,
     parallelGroup: 1,
-    inputs: {},
+    inputs: {
+      // designSystemPath will be populated from taskInput in buildAgentInput
+    },
     dependencies: [],
   },
   {
@@ -53,7 +55,9 @@ export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
     agentName: 'DesignSystemAnalyzer',
     executionOrder: 1,
     parallelGroup: 1,
-    inputs: {},
+    inputs: {
+      // designSystemPath will be populated from taskInput in buildAgentInput
+    },
     dependencies: [],
   },
   {

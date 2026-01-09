@@ -143,6 +143,7 @@ export class TaskOrchestrator {
       const result = await task.run(ctx, tools, artifacts, streamHandler, {
         userPrompt: request.prompt,
         nodeId,
+        designSystemPath: this.configService.getDesignSystemPath(),
         maxIterations: 3,
         predefinedAgents, // Pass predefined agent order from command
         qualityThreshold: 90,

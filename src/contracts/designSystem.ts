@@ -2,6 +2,40 @@ import { z } from 'zod';
 import { IssueSchema, TraceEventSchema } from './common';
 
 // ============================================================================
+// Design System Analysis Result
+// ============================================================================
+
+export const DesignTokenSchema = z.record(z.any());
+
+export const DesignDomainSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  tokens: DesignTokenSchema,
+});
+
+export const DesignSystemAnalysisResultSchema = z.object({
+  schemaVersion: z.literal('1.0'),
+  domains: z.array(DesignDomainSchema),
+  componentPatterns: z.array(z.string()).optional(),
+  // Categorized domains produced by LLM categorization: { categoryName: DesignDomain[] }
+  categorizedDomains: z.record(z.array(DesignDomainSchema)).optional(),
+  // Categorized component patterns produced by LLM categorization: { categoryName: string[] }
+  categorizedComponentPatterns: z.record(z.array(z.string())).optional(),
+  issues: z.array(IssueSchema).optional(),
+  designSystemPath: z.string().optional(),
+  frameworkInfo: z.object({
+    name: z.string().optional(),
+    version: z.string().optional(),
+    ui: z.string().optional(),
+  }).optional(),
+  trace: z.array(TraceEventSchema).optional(),
+});
+
+export type DesignToken = z.infer<typeof DesignTokenSchema>;
+export type DesignDomain = z.infer<typeof DesignDomainSchema>;
+export type DesignSystemAnalysisResult = z.infer<typeof DesignSystemAnalysisResultSchema>;
+
+// ============================================================================
 // Design System Mapping Result
 // ============================================================================
 

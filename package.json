@@ -103,8 +103,8 @@
   "scripts": {
     "vscode:prepublish": "npm run esbuild-base -- --minify",
     "esbuild-base": "node esbuild.js",
-    "esbuild": "npm run esbuild-base -- --sourcemap",
-    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
+    "esbuild": "HELIX_DEBUG=1 npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "HELIX_DEBUG=1 npm run esbuild-base -- --sourcemap --watch",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",

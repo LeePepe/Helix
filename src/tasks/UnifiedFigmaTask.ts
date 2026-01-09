@@ -8,6 +8,7 @@ import { StreamHandler } from '../runtime/StreamHandler';
 import { IntentAnalyzerAgent, AgentExecutionPlan } from '../agents/IntentAnalyzerAgent';
 import { FigmaAnalyzerAgent } from '../agents/FigmaAnalyzerAgent';
 import { DesignSystemAnalyzerAgent } from '../agents/DesignSystemAnalyzerAgent';
+import { isDebugMode } from '../utils/debug';
 import { PlannerAgent } from '../agents/PlannerAgent';
 import { CodeGeneratorAgent } from '../agents/CodeGeneratorAgent';
 import { ComparerAgent } from '../agents/ComparerAgent';
@@ -96,6 +97,11 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     console.log('[Helix] [UnifiedFigmaTask] Input designSystemPath:', input.designSystemPath);
     console.log('[Helix] [UnifiedFigmaTask] Input predefinedAgents:', input.predefinedAgents?.map(a => a.agentName).join(', '));
 
+    // Validate that designSystemPath is provided at task level
+    if (!input.designSystemPath) {
+      console.warn('[Helix] [UnifiedFigmaTask] ⚠️ No designSystemPath provided in task input');
+    }
+
     // Step 1: Analyze user intent (with optional predefined agents)
     stream.markdown('## Analyzing Intent\n');
     const intentAnalyzer = new IntentAnalyzerAgent();
@@ -109,6 +115,18 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     stream.markdown(`**Intent:** ${intentAnalysis.intent}\n`);
     stream.markdown(`**Selected Agents:** ${intentAnalysis.selectedAgents.map(a => a.agentName).join(' → ')}\n`);
     stream.markdown(`**Reasoning:** ${intentAnalysis.reasoning}\n\n`);
+
+    // DEBUG: Only execute FigmaAnalyzer and DesignSystemAnalyzer to debug
+    console.warn('[Helix] [DEBUG] Temporarily disabling other agents. Only FigmaAnalyzer and DesignSystemAnalyzer will run.');
+    intentAnalysis.selectedAgents = intentAnalysis.selectedAgents.filter(
+      (a: any) =>  a.agentName === 'DesignSystemAnalyzer'
+    );
+    if (intentAnalysis.selectedAgents.length === 0) {
+      intentAnalysis.selectedAgents = [
+        { agentName: 'DesignSystemAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {} }
+      ];
+    }
+    stream.markdown('> ⚠️ **DEBUG MODE**: Only `FigmaAnalyzer` and `DesignSystemAnalyzer` are enabled.\n\n');
 
     // Execute the simplified pipeline
     return await this.executeSimplifiedPipeline(
@@ -148,6 +166,15 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
         executedAgents.push(plan.agentName);
 
+            // Display DesignSystemAnalyzer result: detailed only in debug mode
+            if (plan.agentName === 'DesignSystemAnalyzer' && result) {
+              if (isDebugMode()) {
+                this.displayDesignSystemDetailed(result, stream);
+              } else {
+                this.displayDesignSystemCompact(result, stream);
+              }
+            }
+
         // Store results based on agent type
         if (plan.agentName === 'CodeGenerator') {
           codegenResults = result?.codegenResults || [result];
@@ -175,6 +202,16 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
         group.forEach((plan, idx) => {
           executedAgents.push(plan.agentName);
+
+          const result = results[idx];
+          // Display DesignSystemAnalyzer result: detailed only in debug mode
+          if (plan.agentName === 'DesignSystemAnalyzer' && result) {
+            if (isDebugMode()) {
+              this.displayDesignSystemDetailed(result, stream);
+            } else {
+              this.displayDesignSystemCompact(result, stream);
+            }
+          }
 
           if (plan.agentName === 'CodeGenerator') {
             codegenResults = results[idx]?.codegenResults || [results[idx]];
@@ -568,6 +605,16 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
       case 'DesignSystemAnalyzer':
         input.figmaAnalysis = agentResults['FigmaAnalyzer']?.figmaAnalysis;
         input.designSystemPath = input.designSystemPath || taskInput.designSystemPath;
+        console.log('[Helix] [DesignSystemAnalyzer] input.designSystemPath:', input.designSystemPath);
+        console.log('[Helix] [DesignSystemAnalyzer] taskInput.designSystemPath:', taskInput.designSystemPath);
+
+        // Validate that designSystemPath is provided
+        if (!input.designSystemPath) {
+          throw new Error(
+            'Design system path is required for DesignSystemAnalyzer. ' +
+            'Please configure it in settings (helix.designSystemPath) or provide it in the task input.'
+          );
+        }
         break;
 
       case 'Planner':
@@ -661,5 +708,53 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     }
 
     stream.markdown(`✅ Applied changes to ${filesWritten} files\n`);
+  }
+
+  /**
+   * Compact display for design system mapping used in non-debug runs.
+   */
+  private displayDesignSystemCompact(result: any, stream: StreamHandler): void {
+    stream.markdown('### 🛠️ Design System Mapping\n');
+    const comps = result.componentMappings?.length || 0;
+    const tokens = result.tokenMappings?.length || 0;
+    const gaps = result.gaps?.length || 0;
+    stream.markdown(`- Component mappings: **${comps}**\n`);
+    stream.markdown(`- Token mappings: **${tokens}**\n`);
+    if (gaps > 0) {
+      stream.markdown(`- Issues detected: **${gaps}** (see logs for details)\n`);
+    }
+  }
+
+  /**
+   * Detailed display for design system mapping used only in debug mode.
+   */
+  private displayDesignSystemDetailed(result: any, stream: StreamHandler): void {
+    stream.markdown('### 🛠️ Design System Mapping (DETAILED)\n');
+    
+    if (result.componentMappings && result.componentMappings.length > 0) {
+      stream.markdown('#### 🧩 Component Mappings\n');
+      let table = '| UI Part | Suggested Component | Confidence | Notes |\n| :--- | :--- | :--- | :--- |\n';
+      result.componentMappings.forEach((m: any) => {
+        table += `| ${m.uiPartId} | \`${m.suggestedComponent}\` | ${Math.round(m.confidence * 100)}% | ${m.notes || ''} |\n`;
+      });
+      stream.markdown(table + '\n');
+    }
+
+    if (result.tokenMappings && result.tokenMappings.length > 0) {
+      stream.markdown('#### 🎨 Token Mappings\n');
+      let table = '| Type | Figma Token | DS Token | Confidence |\n| :--- | :--- | :--- | :--- |\n';
+      result.tokenMappings.forEach((m: any) => {
+        table += `| ${m.tokenType} | \`${m.figmaToken}\` | \`${m.dsToken}\` | ${Math.round(m.confidence * 100)}% |\n`;
+      });
+      stream.markdown(table + '\n');
+    }
+
+    if (result.gaps && result.gaps.length > 0) {
+      stream.markdown('#### ⚠️ Gaps & Issues\n');
+      result.gaps.forEach((g: any) => {
+        stream.markdown(`- **${g.type}**: ${g.message} (Critical: ${g.severity === 'error' ? 'Yes' : 'No'})\n`);
+      });
+      stream.markdown('\n');
+    }
   }
 }
