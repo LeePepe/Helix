@@ -123,7 +123,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     );
     if (intentAnalysis.selectedAgents.length === 0) {
       intentAnalysis.selectedAgents = [
-        { agentName: 'DesignSystemAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {} }
+        { agentName: 'DesignSystemAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] }
       ];
     }
     stream.markdown('> ⚠️ **DEBUG MODE**: Only `FigmaAnalyzer` and `DesignSystemAnalyzer` are enabled.\n\n');
@@ -151,83 +151,15 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     let codegenResults: CodegenResult[] = [];
     let compareResult: CompareResult | undefined;
 
-    // Execute agents according to plan
+    // Execute agents according to plan (uses shared helper)
     const executionGroups = this.groupByParallel(intentAnalysis.selectedAgents);
 
-    for (const group of executionGroups) {
-      if (group.length === 1) {
-        // Sequential execution
-        const plan = group[0];
-        stream.progress(`Executing ${plan.agentName}...`);
+    const { executed: executedFromGroups, codegen: cgFromGroups = [], compare: cmpFromGroups } =
+      await this.executeGroups(executionGroups, {}, ctx, tools, artifacts, input, stream);
 
-        const result = await this.executeAgent(
-          plan, {}, ctx, tools, artifacts, input, stream
-        );
-
-        executedAgents.push(plan.agentName);
-
-            // Display DesignSystemAnalyzer result: detailed only in debug mode
-            if (plan.agentName === 'DesignSystemAnalyzer' && result) {
-              if (isDebugMode()) {
-                this.displayDesignSystemDetailed(result, stream);
-              } else {
-                this.displayDesignSystemCompact(result, stream);
-              }
-            }
-
-        // Store results based on agent type
-        if (plan.agentName === 'CodeGenerator') {
-          codegenResults = result?.codegenResults || [result];
-        } else if (plan.agentName === 'Comparer') {
-          compareResult = result;
-        }
-
-        // Display metrics for this agent
-        const metrics = ctx.getAgentMetrics();
-        const lastMetric = metrics[metrics.length - 1];
-        if (lastMetric) {
-          stream.displayAgentMetrics(lastMetric);
-        }
-      } else {
-        // Parallel execution
-        stream.progress(`Executing ${group.map(p => p.agentName).join(', ')} in parallel...`);
-
-        const beforeMetricsCount = ctx.getAgentMetrics().length;
-
-        const results = await Promise.all(
-          group.map(plan =>
-            this.executeAgent(plan, {}, ctx, tools, artifacts, input, stream)
-          )
-        );
-
-        group.forEach((plan, idx) => {
-          executedAgents.push(plan.agentName);
-
-          const result = results[idx];
-          // Display DesignSystemAnalyzer result: detailed only in debug mode
-          if (plan.agentName === 'DesignSystemAnalyzer' && result) {
-            if (isDebugMode()) {
-              this.displayDesignSystemDetailed(result, stream);
-            } else {
-              this.displayDesignSystemCompact(result, stream);
-            }
-          }
-
-          if (plan.agentName === 'CodeGenerator') {
-            codegenResults = results[idx]?.codegenResults || [results[idx]];
-          } else if (plan.agentName === 'Comparer') {
-            compareResult = results[idx];
-          }
-        });
-
-        // Display metrics for parallel agents
-        const allMetrics = ctx.getAgentMetrics();
-        const newMetrics = allMetrics.slice(beforeMetricsCount);
-        newMetrics.forEach(metric => {
-          stream.displayAgentMetrics(metric);
-        });
-      }
-    }
+    executedAgents.push(...executedFromGroups);
+    codegenResults = cgFromGroups || codegenResults;
+    compareResult = cmpFromGroups || compareResult;
 
     // Apply code changes if CodeGenerator was executed
     if (codegenResults.length > 0 && !ctx.settings.dryRun) {
@@ -279,60 +211,18 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     // Execute agents according to plan
     const executionGroups = this.groupByParallel(intentAnalysis.selectedAgents);
 
-    for (const group of executionGroups) {
-      if (group.length === 1) {
-        // Sequential execution
-        const plan = group[0];
-        stream.progress(`Executing ${plan.agentName}...`);
+    // Use executeGroups to run and collect results
+    const { executed: executedFromGroups, codegen: codegenResults = [] } =
+      await this.executeGroups(executionGroups, agentResults, ctx, tools, artifacts, input, stream);
 
-        const result = await this.executeAgent(
-          plan, agentResults, ctx, tools, artifacts, input, stream
-        );
-
-        agentResults[plan.agentName] = result;
-        executedAgents.push(plan.agentName);
-
-        // Display metrics for this agent
-        const metrics = ctx.getAgentMetrics();
-        const lastMetric = metrics[metrics.length - 1];
-        if (lastMetric) {
-          stream.displayAgentMetrics(lastMetric);
-        }
-      } else {
-        // Parallel execution
-        stream.progress(`Executing ${group.map(p => p.agentName).join(', ')} in parallel...`);
-
-        const beforeMetricsCount = ctx.getAgentMetrics().length;
-
-        const results = await Promise.all(
-          group.map(plan =>
-            this.executeAgent(plan, agentResults, ctx, tools, artifacts, input, stream)
-          )
-        );
-
-        group.forEach((plan, idx) => {
-          agentResults[plan.agentName] = results[idx];
-          executedAgents.push(plan.agentName);
-        });
-
-        // Display metrics for parallel agents
-        const allMetrics = ctx.getAgentMetrics();
-        const newMetrics = allMetrics.slice(beforeMetricsCount);
-        newMetrics.forEach(metric => {
-          stream.displayAgentMetrics(metric);
-        });
-      }
-    }
-
-    // Extract codegen results
-    const codegenResults = agentResults['CodeGenerator']?.codegenResults || [];
+    executedAgents.push(...executedFromGroups);
 
     // Apply changes if not in dry-run mode
     if (!ctx.settings.dryRun && codegenResults.length > 0) {
       await this.applyCodeChanges(codegenResults, ctx, tools, stream);
     }
 
-    const totalFiles = codegenResults.reduce((sum: number, r: any) => sum + r.files.length, 0);
+    const totalFiles = codegenResults.reduce((sum: number, r: any) => sum + (r.files?.length || 0), 0);
     const summary = `Generated ${totalFiles} file changes using ${executedAgents.length} agents`;
 
     // Display agent flow visualization
@@ -404,53 +294,14 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         intentAnalysis.selectedAgents.filter((a: any) => a.agentName !== 'FigmaAnalyzer')
       );
 
-      for (const group of executionGroups) {
-        if (group.length === 1) {
-          const plan = group[0];
-          stream.progress(`Executing ${plan.agentName}...`);
+      // Execute iteration agents via helper
+      const { executed: executedFromGroups, codegen: codegenFromGroups } =
+        await this.executeGroups(executionGroups, agentResults, ctx, tools, artifacts, input, stream);
 
-          const beforeMetricsCount = ctx.getAgentMetrics().length;
+      executedFromGroups.forEach(name => { if (!executedAgents.includes(name)) executedAgents.push(name); });
 
-          const result = await this.executeAgent(
-            plan, agentResults, ctx, tools, artifacts, input, stream
-          );
-
-          agentResults[plan.agentName] = result;
-          if (!executedAgents.includes(plan.agentName)) {
-            executedAgents.push(plan.agentName);
-          }
-
-          // Display metrics for this agent
-          const allMetrics = ctx.getAgentMetrics();
-          if (allMetrics.length > beforeMetricsCount) {
-            stream.displayAgentMetrics(allMetrics[allMetrics.length - 1]);
-          }
-        } else {
-          stream.progress(`Executing ${group.map(p => p.agentName).join(', ')} in parallel...`);
-
-          const beforeMetricsCount = ctx.getAgentMetrics().length;
-
-          const results = await Promise.all(
-            group.map(plan =>
-              this.executeAgent(plan, agentResults, ctx, tools, artifacts, input, stream)
-            )
-          );
-
-          group.forEach((plan, idx) => {
-            agentResults[plan.agentName] = results[idx];
-            if (!executedAgents.includes(plan.agentName)) {
-              executedAgents.push(plan.agentName);
-            }
-          });
-
-          // Display metrics for parallel agents
-          const allMetrics = ctx.getAgentMetrics();
-          const newMetrics = allMetrics.slice(beforeMetricsCount);
-          newMetrics.forEach(metric => {
-            stream.displayAgentMetrics(metric);
-          });
-        }
-      }
+      // Merge codegen results if any
+      const codegenResultsLocal = codegenFromGroups || [];
 
       const compareResult = agentResults['Comparer'];
       const planResult = agentResults['Planner'];
@@ -683,6 +534,84 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
   }
 
   /**
+   * Execute grouped agent plans (parallel groups) and handle metrics and result collection.
+   * Returns executed agent names, collected codegen results array, and last comparer result.
+   */
+  private async executeGroups(
+    groups: AgentExecutionPlan[][],
+    agentResults: AgentResults,
+    ctx: ExecutionContext,
+    tools: ToolRegistry,
+    artifacts: ArtifactStore,
+    taskInput: UnifiedFigmaInput,
+    stream: StreamHandler
+  ): Promise<{ executed: string[]; codegen?: CodegenResult[]; compare?: any }> {
+    const executed: string[] = [];
+    let codegenResults: CodegenResult[] = [];
+    let compareResult: any;
+
+    for (const group of groups) {
+      if (group.length === 1) {
+        const plan = group[0];
+        stream.progress(`Executing ${plan.agentName}...`);
+
+        const beforeMetricsCount = ctx.getAgentMetrics().length;
+
+        const result = await this.executeAgent(plan, agentResults, ctx, tools, artifacts, taskInput, stream);
+
+        agentResults[plan.agentName] = result;
+        executed.push(plan.agentName);
+        
+        
+
+
+        if (plan.agentName === 'CodeGenerator') {
+          codegenResults = result?.codegenResults || [result];
+        } else if (plan.agentName === 'Comparer') {
+          compareResult = result;
+        }
+
+        // Display metrics for this agent
+        const allMetrics = ctx.getAgentMetrics();
+        if (allMetrics.length > beforeMetricsCount) {
+          stream.displayAgentMetrics(allMetrics[allMetrics.length - 1]);
+        }
+      } else {
+        stream.progress(`Executing ${group.map(p => p.agentName).join(', ')} in parallel...`);
+
+        const beforeMetricsCount = ctx.getAgentMetrics().length;
+
+        const results = await Promise.all(
+          group.map(plan => this.executeAgent(plan, agentResults, ctx, tools, artifacts, taskInput, stream))
+        );
+
+        group.forEach((plan, idx) => {
+          agentResults[plan.agentName] = results[idx];
+          executed.push(plan.agentName);
+
+          const result = results[idx];
+          
+        
+
+
+          if (plan.agentName === 'CodeGenerator') {
+            codegenResults = results[idx]?.codegenResults || [results[idx]];
+          } else if (plan.agentName === 'Comparer') {
+            compareResult = results[idx];
+          }
+        });
+
+        // Display metrics for parallel agents
+        const allMetrics = ctx.getAgentMetrics();
+        const newMetrics = allMetrics.slice(beforeMetricsCount);
+        newMetrics.forEach(metric => stream.displayAgentMetrics(metric));
+      }
+    }
+
+    return { executed, codegen: codegenResults, compare: compareResult };
+  }
+
+  /**
    * Apply code changes to workspace
    */
   private async applyCodeChanges(
@@ -710,51 +639,5 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     stream.markdown(`✅ Applied changes to ${filesWritten} files\n`);
   }
 
-  /**
-   * Compact display for design system mapping used in non-debug runs.
-   */
-  private displayDesignSystemCompact(result: any, stream: StreamHandler): void {
-    stream.markdown('### 🛠️ Design System Mapping\n');
-    const comps = result.componentMappings?.length || 0;
-    const tokens = result.tokenMappings?.length || 0;
-    const gaps = result.gaps?.length || 0;
-    stream.markdown(`- Component mappings: **${comps}**\n`);
-    stream.markdown(`- Token mappings: **${tokens}**\n`);
-    if (gaps > 0) {
-      stream.markdown(`- Issues detected: **${gaps}** (see logs for details)\n`);
-    }
-  }
-
-  /**
-   * Detailed display for design system mapping used only in debug mode.
-   */
-  private displayDesignSystemDetailed(result: any, stream: StreamHandler): void {
-    stream.markdown('### 🛠️ Design System Mapping (DETAILED)\n');
-    
-    if (result.componentMappings && result.componentMappings.length > 0) {
-      stream.markdown('#### 🧩 Component Mappings\n');
-      let table = '| UI Part | Suggested Component | Confidence | Notes |\n| :--- | :--- | :--- | :--- |\n';
-      result.componentMappings.forEach((m: any) => {
-        table += `| ${m.uiPartId} | \`${m.suggestedComponent}\` | ${Math.round(m.confidence * 100)}% | ${m.notes || ''} |\n`;
-      });
-      stream.markdown(table + '\n');
-    }
-
-    if (result.tokenMappings && result.tokenMappings.length > 0) {
-      stream.markdown('#### 🎨 Token Mappings\n');
-      let table = '| Type | Figma Token | DS Token | Confidence |\n| :--- | :--- | :--- | :--- |\n';
-      result.tokenMappings.forEach((m: any) => {
-        table += `| ${m.tokenType} | \`${m.figmaToken}\` | \`${m.dsToken}\` | ${Math.round(m.confidence * 100)}% |\n`;
-      });
-      stream.markdown(table + '\n');
-    }
-
-    if (result.gaps && result.gaps.length > 0) {
-      stream.markdown('#### ⚠️ Gaps & Issues\n');
-      result.gaps.forEach((g: any) => {
-        stream.markdown(`- **${g.type}**: ${g.message} (Critical: ${g.severity === 'error' ? 'Yes' : 'No'})\n`);
-      });
-      stream.markdown('\n');
-    }
-  }
+  
 }

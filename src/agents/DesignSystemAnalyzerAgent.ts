@@ -13,6 +13,7 @@ import { ConfigService } from '../services/configService';
 import { PromptService } from '../services/promptService';
 import { ChatService } from '../services/chatService';
 import { StreamHandler } from '../runtime/StreamHandler';
+import { isDebugMode } from '../utils/debug';
 import * as path from 'path';
 
 /**
@@ -119,18 +120,69 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
     console.log('[Helix] [DesignSystemAnalyzer] ✨ Analysis complete!');
     console.log('[Helix] [DesignSystemAnalyzer] Summary: Domains:', designDomains.length, '| Patterns:', componentPatterns.length);
     
-    // Emit a compact summary to the stream. Detailed reporting is moved
-    // to the caller so callers can decide whether to show full output
-    // (e.g., only in debug mode).
+    // Emit display to the stream. Use detailed view in debug mode.
     if (stream) {
-      stream.markdown('\n---\n\n');
-      stream.markdown('## 📊 Design System Analysis Summary\n\n');
-      stream.markdown(`- Domains discovered: **${designDomains.length}**\n`);
-      stream.markdown(`- Component patterns: **${componentPatterns.length}**\n`);
-      stream.markdown('\n---\n\n');
+      if (isDebugMode()) {
+        this.displayDesignSystemDetailed(result, stream);
+      } else {
+        this.displayDesignSystemCompact(result, stream);
+      }
     }
     
     return result;
+  }
+
+  /**
+   * Compact display for design system mapping used in non-debug runs.
+   */
+  private displayDesignSystemCompact(result: any, stream: StreamHandler): void {
+    stream.markdown('\n---\n\n');
+    stream.markdown('### 🛠️ Design System Mapping\n');
+    const comps = result.componentMappings?.length || 0;
+    const tokens = result.tokenMappings?.length || 0;
+    const gaps = result.gaps?.length || 0;
+    stream.markdown(`- Component mappings: **${comps}**\n`);
+    stream.markdown(`- Token mappings: **${tokens}**\n`);
+    if (gaps > 0) {
+      stream.markdown(`- Issues detected: **${gaps}** (see logs for details)\n`);
+    }
+    stream.markdown('\n---\n\n');
+  }
+
+  /**
+   * Detailed display for design system mapping used only in debug mode.
+   */
+  private displayDesignSystemDetailed(result: any, stream: StreamHandler): void {
+    stream.markdown('\n---\n\n');
+    stream.markdown('### 🛠️ Design System Mapping (DETAILED)\n');
+    
+    if (result.componentMappings && result.componentMappings.length > 0) {
+      stream.markdown('#### 🧩 Component Mappings\n');
+      let table = '| UI Part | Suggested Component | Confidence | Notes |\n| :--- | :--- | :--- | :--- |\n';
+      result.componentMappings.forEach((m: any) => {
+        table += `| ${m.uiPartId} | \`${m.suggestedComponent}\` | ${Math.round(m.confidence * 100)}% | ${m.notes || ''} |\n`;
+      });
+      stream.markdown(table + '\n');
+    }
+
+    if (result.tokenMappings && result.tokenMappings.length > 0) {
+      stream.markdown('#### 🎨 Token Mappings\n');
+      let table = '| Type | Figma Token | DS Token | Confidence |\n| :--- | :--- | :--- | :--- |\n';
+      result.tokenMappings.forEach((m: any) => {
+        table += `| ${m.tokenType} | \`${m.figmaToken}\` | \`${m.dsToken}\` | ${Math.round(m.confidence * 100)}% |\n`;
+      });
+      stream.markdown(table + '\n');
+    }
+
+    if (result.gaps && result.gaps.length > 0) {
+      stream.markdown('#### ⚠️ Gaps & Issues\n');
+      result.gaps.forEach((g: any) => {
+        stream.markdown(`- **${g.type}**: ${g.message} (Critical: ${g.severity === 'error' ? 'Yes' : 'No'})\n`);
+      });
+      stream.markdown('\n');
+    }
+
+    stream.markdown('\n---\n\n');
   }
 
   /**
@@ -490,6 +542,54 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
     } catch (error) {
       console.error('[Helix] [DesignSystemAnalyzer] [categorizeComponentPatterns] JSON parse failed:', error);
       return { 'All Patterns': patterns };
+    }
+  }
+
+  /**
+   * Compact display for design system mapping used in non-debug runs.
+   */
+  static displayDesignSystemCompact(result: any, stream: StreamHandler): void {
+    stream.markdown('### 🛠️ Design System Mapping\n');
+    const comps = result.componentMappings?.length || 0;
+    const tokens = result.tokenMappings?.length || 0;
+    const gaps = result.gaps?.length || 0;
+    stream.markdown(`- Component mappings: **${comps}**\n`);
+    stream.markdown(`- Token mappings: **${tokens}**\n`);
+    if (gaps > 0) {
+      stream.markdown(`- Issues detected: **${gaps}** (see logs for details)\n`);
+    }
+  }
+
+  /**
+   * Detailed display for design system mapping used only in debug mode.
+   */
+  static displayDesignSystemDetailed(result: any, stream: StreamHandler): void {
+    stream.markdown('### 🛠️ Design System Mapping (DETAILED)\n');
+    
+    if (result.componentMappings && result.componentMappings.length > 0) {
+      stream.markdown('#### 🧩 Component Mappings\n');
+      let table = '| UI Part | Suggested Component | Confidence | Notes |\n| :--- | :--- | :--- | :--- |\n';
+      result.componentMappings.forEach((m: any) => {
+        table += `| ${m.uiPartId} | \`${m.suggestedComponent}\` | ${Math.round(m.confidence * 100)}% | ${m.notes || ''} |\n`;
+      });
+      stream.markdown(table + '\n');
+    }
+
+    if (result.tokenMappings && result.tokenMappings.length > 0) {
+      stream.markdown('#### 🎨 Token Mappings\n');
+      let table = '| Type | Figma Token | DS Token | Confidence |\n| :--- | :--- | :--- | :--- |\n';
+      result.tokenMappings.forEach((m: any) => {
+        table += `| ${m.tokenType} | \`${m.figmaToken}\` | \`${m.dsToken}\` | ${Math.round(m.confidence * 100)}% |\n`;
+      });
+      stream.markdown(table + '\n');
+    }
+
+    if (result.gaps && result.gaps.length > 0) {
+      stream.markdown('#### ⚠️ Gaps & Issues\n');
+      result.gaps.forEach((g: any) => {
+        stream.markdown(`- **${g.type}**: ${g.message} (Critical: ${g.severity === 'error' ? 'Yes' : 'No'})\n`);
+      });
+      stream.markdown('\n');
     }
   }
 
