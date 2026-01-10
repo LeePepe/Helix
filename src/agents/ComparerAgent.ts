@@ -1,15 +1,20 @@
 import * as vscode from 'vscode';
 import { BaseAgent } from './base/Agent';
 import { CompareResult, CompareResultSchema } from '../contracts';
+import { FigmaAnalysisResult } from '../contracts/figma';
+import { DesignSystemAnalysisResult } from '../contracts/designSystem';
 import { ExecutionContext } from '../runtime/ExecutionContext';
 import { ToolRegistry } from '../runtime/ToolRegistry';
+import { StreamHandler } from '../runtime/StreamHandler';
 import promptContent from './prompts/comparer.md';
 
 export interface ComparerInput {
   // Direct data input from previous agents
-  figmaData?: any;
+  figmaData?: FigmaAnalysisResult;
+  designSystem?: DesignSystemAnalysisResult | null;
   implementationContext?: any;
 }
+
 
 export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
   readonly name = 'Comparer';
@@ -20,10 +25,14 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
     ctx: ExecutionContext,
     tools: ToolRegistry,
     input: ComparerInput,
-    stream?: any
+    stream?: StreamHandler
   ): Promise<CompareResult> {
     const figmaData = input.figmaData;
+    const designSystem = input.designSystem;
     const implementationContext = input.implementationContext;
+
+    console.log('[Helix] [ComparerAgent] Input figmaData:', JSON.stringify(figmaData, null, 2));
+    console.log('[Helix] [ComparerAgent] Input designSystem:', JSON.stringify(designSystem, null, 2));
 
     // Perform comparison
     const prompt = promptContent;
@@ -31,6 +40,7 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
       vscode.LanguageModelChatMessage.User(prompt),
       vscode.LanguageModelChatMessage.User(
         `Figma Design:\n${JSON.stringify(figmaData, null, 2)}\n\n` +
+        `Design System:\n${JSON.stringify(designSystem, null, 2)}\n\n` +
         `Implementation:\n${JSON.stringify(implementationContext, null, 2)}`
       ),
     ];

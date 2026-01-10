@@ -2,9 +2,11 @@ import * as vscode from 'vscode';
 import { BaseAgent } from './base/Agent';
 import { FigmaAnalysisResult, FigmaAnalysisResultSchema } from '../contracts';
 import { ExecutionContext } from '../runtime/ExecutionContext';
+import { StreamHandler } from '../runtime/StreamHandler';
 import { ToolRegistry } from '../runtime/ToolRegistry';
 import { FigmaService } from '../services/figmaService';
 import { LLMService } from '../services/llmService';
+import { isDebugMode } from '../utils/debug';
 import promptContent from './prompts/figma-analyzer.md';
 
 /**
@@ -40,7 +42,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     ctx: ExecutionContext,
     _tools: ToolRegistry,
     input: FigmaAnalyzerInput,
-    stream?: any
+    stream?: StreamHandler
   ): Promise<FigmaAnalysisResult> {
     ctx.trace('agent', 'figma-analyzer-execute', { nodeId: input.nodeId });
 
@@ -149,6 +151,94 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     console.log('[Helix] [FigmaAnalyzer] Final trace length:', result.trace.length);
     console.log('[Helix] [FigmaAnalyzer] Returning result with keys:', Object.keys(result));
 
+    // Emit display to the stream. Use detailed view in debug mode.
+    if (stream) {
+      if (isDebugMode()) {
+        this.displayFigmaAnalysisDetailed(result, stream);
+      } else {
+        this.displayFigmaAnalysisCompact(result, stream);
+      }
+    }
+
     return result;
+  }
+
+  /**
+   * Compact display for Figma analysis result used in non-debug runs.
+   */
+  private displayFigmaAnalysisCompact(result: FigmaAnalysisResult, stream: StreamHandler): void {
+    stream.markdown('\n---\n\n');
+    stream.markdown('### 🎨 Figma Analysis Summary\n');
+    
+    stream.markdown(`- **Root Element**: ${result.root?.name || 'N/A'} (${result.root?.role || 'Unknown'})\n`);
+    stream.markdown(`- **Cross-cutting Cases**: ${result.cases?.length || 0}\n`);
+    
+    const riskCount = result.risks?.length || 0;
+    if (riskCount > 0) {
+      stream.markdown(`- **Risks Identified**: ${riskCount}\n`);
+    } else {
+      stream.markdown(`- **Risks Identified**: None\n`);
+    }
+
+    const hasTokens = result.tokensHint && Object.keys(result.tokensHint).length > 0;
+    stream.markdown(`- **Tokens Detected**: ${hasTokens ? 'Yes' : 'No'}\n`);
+    
+    stream.markdown('\n---\n\n');
+  }
+
+  /**
+   * Detailed display for Figma analysis result used only in debug mode.
+   */
+  private displayFigmaAnalysisDetailed(result: FigmaAnalysisResult, stream: StreamHandler): void {
+    stream.markdown('\n---\n\n');
+    stream.markdown('### 🎨 Figma Analysis (DETAILED)\n');
+
+    // Root Element
+    if (result.root) {
+      stream.markdown('#### 🌳 Root Structure\n');
+      stream.markdown(`- **Name**: ${result.root.name}\n`);
+      stream.markdown(`- **Role**: ${result.root.role}\n`);
+      if (result.root.layoutNotes) {
+        stream.markdown(`- **Layout**: ${result.root.layoutNotes}\n`);
+      }
+      const childrenCount = result.root.children ? result.root.children.length : 0;
+      stream.markdown(`- **Children**: ${childrenCount}\n`);
+    }
+
+    // Cases
+    if (result.cases && result.cases.length > 0) {
+      stream.markdown('#### 🧩 Cross-cutting Cases\n');
+      let table = '| ID | Title | Description |\n| :--- | :--- | :--- |\n';
+      result.cases.forEach((c) => {
+        table += `| ${c.id} | ${c.title} | ${c.description} |\n`;
+      });
+      stream.markdown(table + '\n');
+    }
+
+    // Risks
+    if (result.risks && result.risks.length > 0) {
+      stream.markdown('#### ⚠️ Risks & Issues\n');
+      result.risks.forEach((issue) => {
+        stream.markdown(`- **${issue.level.toUpperCase()}** (${issue.id}): ${issue.message}${issue.details ? ` — ${issue.details}` : ''}\n`);
+      });
+      stream.markdown('\n');
+    }
+
+    // Tokens Hint
+    if (result.tokensHint) {
+      stream.markdown('#### 🎨 Tokens Hint\n');
+      const hints = result.tokensHint;
+      if (hints.colors && hints.colors.length > 0) {
+        stream.markdown(`- **Colors**: ${hints.colors.join(', ')}\n`);
+      }
+      if (hints.typography && hints.typography.length > 0) {
+        stream.markdown(`- **Typography**: ${hints.typography.join(', ')}\n`);
+      }
+      if (hints.spacing && hints.spacing.length > 0) {
+        stream.markdown(`- **Spacing**: ${hints.spacing.join(', ')}\n`);
+      }
+    }
+
+    stream.markdown('\n---\n\n');
   }
 }

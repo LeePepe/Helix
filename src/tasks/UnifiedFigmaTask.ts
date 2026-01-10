@@ -116,17 +116,18 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     stream.markdown(`**Selected Agents:** ${intentAnalysis.selectedAgents.map(a => a.agentName).join(' → ')}\n`);
     stream.markdown(`**Reasoning:** ${intentAnalysis.reasoning}\n\n`);
 
-    // DEBUG: Only execute FigmaAnalyzer and DesignSystemAnalyzer to debug
-    console.warn('[Helix] [DEBUG] Temporarily disabling other agents. Only FigmaAnalyzer and DesignSystemAnalyzer will run.');
-    intentAnalysis.selectedAgents = intentAnalysis.selectedAgents.filter(
-      (a: any) =>  a.agentName === 'DesignSystemAnalyzer'
-    );
-    if (intentAnalysis.selectedAgents.length === 0) {
-      intentAnalysis.selectedAgents = [
-        { agentName: 'DesignSystemAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] }
-      ];
-    }
-    stream.markdown('> ⚠️ **DEBUG MODE**: Only `FigmaAnalyzer` and `DesignSystemAnalyzer` are enabled.\n\n');
+    // // DEBUG: Only execute FigmaAnalyzer and DesignSystemAnalyzer to debug
+    // console.warn('[Helix] [DEBUG] Temporarily disabling other agents. Only FigmaAnalyzer and DesignSystemAnalyzer will run.');
+    // intentAnalysis.selectedAgents = intentAnalysis.selectedAgents.filter(
+    //   (a: any) =>  a.agentName === 'FigmaAnalyzer' || a.agentName === 'DesignSystemAnalyzer'
+    // );
+    // if (intentAnalysis.selectedAgents.length === 0) {
+    //   intentAnalysis.selectedAgents = [
+    //     { agentName: 'DesignSystemAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] },
+    //     { agentName: 'FigmaAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] }
+    //   ];
+    // }
+    // stream.markdown('> ⚠️ **DEBUG MODE**: Only `FigmaAnalyzer` and `DesignSystemAnalyzer` are enabled.\n\n');
 
     // Execute the simplified pipeline
     return await this.executeSimplifiedPipeline(
@@ -590,10 +591,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
           executed.push(plan.agentName);
 
           const result = results[idx];
-          
         
-
-
           if (plan.agentName === 'CodeGenerator') {
             codegenResults = results[idx]?.codegenResults || [results[idx]];
           } else if (plan.agentName === 'Comparer') {

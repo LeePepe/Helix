@@ -5,8 +5,15 @@
  */
 export function isDebugMode(): boolean {
   try {
-    if (process.env.HELIX_DEBUG === '1') return true;
-    return process.argv.some(arg => arg === '--helix-debug' || arg === '--debug');
+    if (process.env.HELIX_DEBUG === '1') {
+      console.log('DEBUG MODE: Enabled via HELIX_DEBUG env var');
+      return true;
+    }
+    const isDebug = process.argv.some(arg => arg === '--helix-debug' || arg === '--debug');
+    if (isDebug) {
+      console.log('DEBUG MODE: Enabled via CLI argument');
+    }
+    return isDebug;
   } catch (e) {
     return false;
   }
