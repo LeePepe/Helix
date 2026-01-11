@@ -16,7 +16,6 @@ import { summarizeContextForPlanner } from '../agents/utils/contextSummarizer';
 
 /**
  * Input for UnifiedFigma task
- * Supports both build-from-scratch and iterative refinement scenarios
  */
 export const UnifiedFigmaInputSchema = z.object({
   // Common
@@ -29,10 +28,6 @@ export const UnifiedFigmaInputSchema = z.object({
   // Build mode
   designSystemPath: z.string().optional(),
   forceCode: z.boolean().optional(),
-
-  // Refinement mode
-  maxIterations: z.number().optional(),
-  qualityThreshold: z.number().default(90),
 });
 
 export type UnifiedFigmaInput = z.infer<typeof UnifiedFigmaInputSchema>;
@@ -66,9 +61,6 @@ interface AgentResults {
 /**
  * UnifiedFigma Task
  * Intelligently determines and executes the required agents based on user intent
- * Supports both:
- * - Build from Figma: analyze -> design system -> plan -> codegen
- * - Fit & Finish: compare -> plan -> codegen (iterative)
  */
 export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOutput> {
   readonly name = 'UnifiedFigma';
@@ -76,13 +68,6 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
   readonly inputSchema = UnifiedFigmaInputSchema as z.ZodType<UnifiedFigmaInput>;
   readonly outputSchema = UnifiedFigmaOutputSchema;
 
-  private agentInstances = new Map<string, any>([
-    ['FigmaAnalyzer', new FigmaAnalyzerAgent()],
-    ['DesignSystemAnalyzer', new DesignSystemAnalyzerAgent()],
-    ['Planner', new PlannerAgent()],
-    ['CodeGenerator', new CodeGeneratorAgent()],
-    ['Comparer', new ComparerAgent()],
-  ]);
 
   protected async execute(
     ctx: ExecutionContext,
@@ -129,23 +114,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     // }
     // stream.markdown('> ⚠️ **DEBUG MODE**: Only `FigmaAnalyzer` and `DesignSystemAnalyzer` are enabled.\n\n');
 
-    // Execute the simplified pipeline
-    return await this.executeSimplifiedPipeline(
-      ctx, tools, artifacts, stream, input, intentAnalysis
-    );
-  }
-
-  /**
-   * Execute simplified pipeline (agents orchestrate internally)
-   */
-  private async executeSimplifiedPipeline(
-    ctx: ExecutionContext,
-    tools: ToolRegistry,
-    artifacts: ArtifactStore,
-    stream: StreamHandler,
-    input: UnifiedFigmaInput,
-    intentAnalysis: any
-  ): Promise<UnifiedFigmaOutput> {
+    // Step 2: Execute workflow
     stream.markdown('## Executing Workflow\n');
 
     const executedAgents: string[] = [];
@@ -193,215 +162,6 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     };
   }
 
-  /**
-   * Execute build-from-scratch pipeline (LEGACY - kept for backward compatibility)
-   */
-  private async executeBuildPipeline(
-    ctx: ExecutionContext,
-    tools: ToolRegistry,
-    artifacts: ArtifactStore,
-    stream: StreamHandler,
-    input: UnifiedFigmaInput,
-    intentAnalysis: any
-  ): Promise<UnifiedFigmaOutput> {
-    stream.markdown('## Building from Figma\n');
-
-    const agentResults: AgentResults = {};
-    const executedAgents: string[] = [];
-
-    // Execute agents according to plan
-    const executionGroups = this.groupByParallel(intentAnalysis.selectedAgents);
-
-    // Use executeGroups to run and collect results
-    const { executed: executedFromGroups, codegen: codegenResults = [] } =
-      await this.executeGroups(executionGroups, agentResults, ctx, tools, artifacts, input, stream);
-
-    executedAgents.push(...executedFromGroups);
-
-    // Apply changes if not in dry-run mode
-    if (!ctx.settings.dryRun && codegenResults.length > 0) {
-      await this.applyCodeChanges(codegenResults, ctx, tools, stream);
-    }
-
-    const totalFiles = codegenResults.reduce((sum: number, r: any) => sum + (r.files?.length || 0), 0);
-    const summary = `Generated ${totalFiles} file changes using ${executedAgents.length} agents`;
-
-    // Display agent flow visualization
-    stream.displayAgentFlow();
-
-    // Display summary of all metrics
-    stream.displayMetricsSummary(ctx.getAgentMetrics());
-
-    return {
-      intent: intentAnalysis.intent,
-      executedAgents,
-      codegenResults,
-      summary,
-    };
-  }
-
-  /**
-   * Execute iterative refinement pipeline
-   */
-  private async executeIterativeRefinement(
-    ctx: ExecutionContext,
-    tools: ToolRegistry,
-    artifacts: ArtifactStore,
-    stream: StreamHandler,
-    input: UnifiedFigmaInput,
-    intentAnalysis: any
-  ): Promise<UnifiedFigmaOutput> {
-    stream.markdown('## Iterative Refinement\n');
-
-    const maxIterations = input.maxIterations || ctx.settings.maxIterations || 3;
-    const qualityThreshold = input.qualityThreshold || 90;
-    
-    const iterations: Array<{
-      compareResult: CompareResult;
-      codegenResults: CodegenResult[];
-    }> = [];
-    
-    const executedAgents: string[] = [];
-
-    // First, analyze Figma design (needed for comparison)
-    stream.progress('Analyzing Figma design...');
-    const figmaAgent = this.agentInstances.get('FigmaAnalyzer');
-    const figmaAnalysis = await figmaAgent.run(ctx, tools, {
-      nodeId: input.nodeId,
-      forceCode: input.forceCode,
-    }, stream);
-
-    // Display FigmaAnalyzer metrics
-    const metrics = ctx.getAgentMetrics();
-    if (metrics.length > 0) {
-      stream.displayAgentMetrics(metrics[metrics.length - 1]);
-    }
-
-    await artifacts.set(
-      { runId: ctx.runId, name: 'figmaAnalysis' },
-      figmaAnalysis
-    );
-    executedAgents.push('FigmaAnalyzer');
-
-    for (let i = 0; i < maxIterations; i++) {
-      stream.markdown(`### Iteration ${i + 1}\n`);
-
-      const agentResults: AgentResults = {
-        FigmaAnalyzer: { figmaAnalysis },
-      };
-
-      // Execute agents for this iteration
-      const executionGroups = this.groupByParallel(
-        intentAnalysis.selectedAgents.filter((a: any) => a.agentName !== 'FigmaAnalyzer')
-      );
-
-      // Execute iteration agents via helper
-      const { executed: executedFromGroups, codegen: codegenFromGroups } =
-        await this.executeGroups(executionGroups, agentResults, ctx, tools, artifacts, input, stream);
-
-      executedFromGroups.forEach(name => { if (!executedAgents.includes(name)) executedAgents.push(name); });
-
-      // Merge codegen results if any
-      const codegenResultsLocal = codegenFromGroups || [];
-
-      const compareResult = agentResults['Comparer'];
-      const planResult = agentResults['Planner'];
-      let codegenResults = agentResults['CodeGenerator']?.codegenResults || [];
-
-      // Check if Planner returned an agent workflow instead of subtasks
-      if (planResult?.planType === 'agent-workflow' && planResult.agentWorkflow) {
-        stream.markdown(`**Planner Decision:** ${planResult.reasoning || 'Re-running agents for better context'}\n`);
-        stream.markdown(`**Workflow:** ${planResult.agentWorkflow.map((a: any) => a.agentName).join(' → ')}\n\n`);
-
-        // Execute the workflow suggested by Planner
-        const workflowGroups = this.groupByParallel(planResult.agentWorkflow);
-
-        for (const group of workflowGroups) {
-          if (group.length === 1) {
-            const step = group[0];
-            stream.progress(`[Workflow] Executing ${step.agentName}...`);
-
-            const result = await this.executeAgent(
-              step, agentResults, ctx, tools, artifacts, input, stream
-            );
-
-            agentResults[step.agentName] = result;
-            if (!executedAgents.includes(step.agentName)) {
-              executedAgents.push(step.agentName);
-            }
-
-            const allMetrics = ctx.getAgentMetrics();
-            if (allMetrics.length > 0) {
-              stream.displayAgentMetrics(allMetrics[allMetrics.length - 1]);
-            }
-          } else {
-            stream.progress(`[Workflow] Executing ${group.map(s => s.agentName).join(', ')} in parallel...`);
-
-            const results = await Promise.all(
-              group.map(step =>
-                this.executeAgent(step, agentResults, ctx, tools, artifacts, input, stream)
-              )
-            );
-
-            group.forEach((step, idx) => {
-              agentResults[step.agentName] = results[idx];
-              if (!executedAgents.includes(step.agentName)) {
-                executedAgents.push(step.agentName);
-              }
-            });
-
-            const allMetrics = ctx.getAgentMetrics();
-            const newMetrics = allMetrics.slice(-group.length);
-            newMetrics.forEach(metric => stream.displayAgentMetrics(metric));
-          }
-        }
-
-        // If workflow includes CodeGenerator, extract results
-        if (agentResults['CodeGenerator']) {
-          codegenResults = agentResults['CodeGenerator']?.codegenResults || [];
-        }
-
-        stream.markdown('**Workflow completed.** Continuing to next iteration...\n\n');
-      }
-
-      iterations.push({ compareResult, codegenResults });
-
-      stream.markdown(
-        `**Score:** ${compareResult.score}/100\n\n` +
-        `**Issues:** ${compareResult.diffs?.length || 0} differences found\n`
-      );
-
-      // Check if quality threshold reached
-      if (compareResult.score >= qualityThreshold) {
-        stream.markdown('✅ Quality threshold reached!\n');
-        break;
-      }
-
-      // Apply changes for next iteration
-      if (!ctx.settings.dryRun && codegenResults.length > 0) {
-        await this.applyCodeChanges(codegenResults, ctx, tools, stream);
-      }
-    }
-
-    const finalScore = iterations[iterations.length - 1]?.compareResult.score || 0;
-    const summary =
-      `Completed ${iterations.length} iterations using ${executedAgents.length} unique agents. ` +
-      `Final score: ${finalScore}/100`;
-
-    // Display agent flow visualization
-    stream.displayAgentFlow();
-
-    // Display summary of all metrics
-    stream.displayMetricsSummary(ctx.getAgentMetrics());
-
-    return {
-      intent: intentAnalysis.intent,
-      executedAgents,
-      iterations,
-      finalScore,
-      summary,
-    };
-  }
 
   /**
    * Execute a single agent with proper context
@@ -415,9 +175,26 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     taskInput: UnifiedFigmaInput,
     stream?: StreamHandler
   ): Promise<any> {
-    const agent = this.agentInstances.get(plan.agentName);
-    if (!agent) {
-      throw new Error(`Agent ${plan.agentName} not found`);
+    // Create agent instance dynamically based on agent name
+    let agent: any;
+    switch (plan.agentName) {
+      case 'FigmaAnalyzer':
+        agent = new FigmaAnalyzerAgent();
+        break;
+      case 'DesignSystemAnalyzer':
+        agent = new DesignSystemAnalyzerAgent();
+        break;
+      case 'Planner':
+        agent = new PlannerAgent();
+        break;
+      case 'CodeGenerator':
+        agent = new CodeGeneratorAgent();
+        break;
+      case 'Comparer':
+        agent = new ComparerAgent();
+        break;
+      default:
+        throw new Error(`Agent ${plan.agentName} not found`);
     }
 
     // Build agent input from plan, previous results, and task input

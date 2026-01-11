@@ -73,7 +73,6 @@ export class TaskOrchestrator {
         nodeId,
         designSystemPath: this.configService.getDesignSystemPath(),
         predefinedAgents, // Pass predefined agent order from command
-        qualityThreshold: 90,
       });
 
       // Show summary
@@ -144,9 +143,7 @@ export class TaskOrchestrator {
         userPrompt: request.prompt,
         nodeId,
         designSystemPath: this.configService.getDesignSystemPath(),
-        maxIterations: 3,
         predefinedAgents, // Pass predefined agent order from command
-        qualityThreshold: 90,
       });
 
       // Show summary
