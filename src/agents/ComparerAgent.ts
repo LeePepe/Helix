@@ -12,7 +12,7 @@ export interface ComparerInput {
   // Direct data input from previous agents
   figmaData?: FigmaAnalysisResult;
   designSystem?: DesignSystemAnalysisResult | null;
-  implementationContext?: any;
+  codeFiles?: { files: Record<string, string> };
 }
 
 
@@ -29,10 +29,11 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
   ): Promise<CompareResult> {
     const figmaData = input.figmaData;
     const designSystem = input.designSystem;
-    const implementationContext = input.implementationContext;
+    const codeFiles = input.codeFiles;
 
     console.log('[Helix] [ComparerAgent] Input figmaData:', JSON.stringify(figmaData, null, 2));
     console.log('[Helix] [ComparerAgent] Input designSystem:', JSON.stringify(designSystem, null, 2));
+    console.log('[Helix] [ComparerAgent] Input codeFiles:', JSON.stringify(codeFiles, null, 2));
 
     // Perform comparison
     const prompt = promptContent;
@@ -41,7 +42,7 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
       vscode.LanguageModelChatMessage.User(
         `Figma Design:\n${JSON.stringify(figmaData, null, 2)}\n\n` +
         `Design System:\n${JSON.stringify(designSystem, null, 2)}\n\n` +
-        `Implementation:\n${JSON.stringify(implementationContext, null, 2)}`
+        `Implementation:\n${JSON.stringify(codeFiles, null, 2)}`
       ),
     ];
 
@@ -59,6 +60,29 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
     }
 
     const result = llmResult.data as CompareResult;
+    
+    console.log('[Helix] [ComparerAgent] LLM Result Score:', result.score);
+    
+    if (stream) {
+      stream.markdown(`### Comparison Analysis (Score: ${result.score}/100)\n\n`);
+        
+      if (result.diffs.length > 0) {
+          stream.markdown('#### Key Differences\n');
+          result.diffs.forEach(diff => {
+              const severityIcon = diff.severity === 'high' ? '🔴' : diff.severity === 'medium' ? '🟡' : '⚪';
+              stream.markdown(`- ${severityIcon} **${diff.category}**: ${diff.description}\n`);
+          });
+          stream.markdown('\n');
+      }
+
+      if (result.nextActions.length > 0) {
+          stream.markdown('#### Recommended Actions\n');
+          result.nextActions.forEach(action => {
+              stream.markdown(`- **${action.title}**: ${action.description}\n`);
+          });
+      }
+    }
+
     if (!result.trace) {
       result.trace = [];
     }

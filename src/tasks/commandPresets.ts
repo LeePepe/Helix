@@ -50,13 +50,21 @@ export const BUILD_FROM_FIGMA_PIPELINE: AgentExecutionPlan[] = [
  * Step 2: Compare design vs implementation
  */
 export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
-
   {
     agentName: 'DesignSystemAnalyzer',
     executionOrder: 1,
     parallelGroup: 1,
     inputs: {
       // designSystemPath will be populated from taskInput in buildAgentInput
+    },
+    dependencies: [],
+  },
+  {
+    agentName: 'CodeAnalyzer',
+    executionOrder: 1,
+    parallelGroup: 1,
+    inputs: {
+      // filePaths will be populated from taskInput
     },
     dependencies: [],
   },
@@ -72,7 +80,7 @@ export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
     executionOrder: 3,
     parallelGroup: 3,
     inputs: {},
-    dependencies: ['FigmaAnalyzer', 'DesignSystemAnalyzer'],
+    dependencies: ['FigmaAnalyzer', 'DesignSystemAnalyzer', 'CodeAnalyzer'],
   },
 ];
 

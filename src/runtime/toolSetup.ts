@@ -8,6 +8,7 @@ import { DesignSystemAnalyzerAgent } from '../agents/DesignSystemAnalyzerAgent';
 import { ComparerAgent } from '../agents/ComparerAgent';
 import { PlannerAgent } from '../agents/PlannerAgent';
 import { CodeGeneratorAgent } from '../agents/CodeGeneratorAgent';
+import { CodeAnalyzerAgent } from '../agents/CodeAnalyzerAgent';
 
 /**
  * Setup and register all tools including agents
@@ -25,6 +26,7 @@ export function setupTools(): ToolRegistry {
   const comparer = new ComparerAgent();
   const planner = new PlannerAgent();
   const codeGenerator = new CodeGeneratorAgent();
+  const codeAnalyzer = new CodeAnalyzerAgent();
 
   // Register LLM tools
   registry.register({
@@ -41,7 +43,12 @@ export function setupTools(): ToolRegistry {
     name: 'LLM Chat JSON',
     description: 'Send chat messages expecting JSON response',
     execute: async (ctx: ExecutionContext, args: any) => {
-      return await llmService.chatJSON(ctx, args.messages, args.schema, args.options);
+      // Ensure caller info is forwarded if provided by tools/agents
+      const options = args.options || {};
+      if (args.caller && !options.caller) {
+        options.caller = args.caller;
+      }
+      return await llmService.chatJSON(ctx, args.messages, args.schema, options);
     },
   });
 
@@ -187,6 +194,14 @@ export function setupTools(): ToolRegistry {
       return { ok: true, data: result };
     },
   });
-
+  registry.register({
+    id: 'agent.codeAnalyzer',
+    name: 'Code Analyzer Agent',
+    description: 'Analyzes existing code implementation',
+    execute: async (ctx: ExecutionContext, args: any) => {
+      const result = await codeAnalyzer.run(ctx, registry, args, args.stream);
+      return { ok: true, data: result };
+    },
+  });
   return registry;
 }

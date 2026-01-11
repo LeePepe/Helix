@@ -7,3 +7,4 @@ export * from './CodeGeneratorAgent';
 export * from './ComparerAgent';
 export * from './ReportGeneratorAgent';
 export * from './IntentAnalyzerAgent';
+export * from './CodeAnalyzerAgent';

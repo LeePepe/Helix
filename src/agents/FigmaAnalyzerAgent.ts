@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { z } from 'zod';
 import { BaseAgent } from './base/Agent';
 import { FigmaAnalysisResult, FigmaAnalysisResultSchema } from '../contracts';
 import { ExecutionContext } from '../runtime/ExecutionContext';
@@ -17,12 +18,32 @@ export interface FigmaAnalyzerInput {
   forceCode?: boolean;
 }
 
+// Internal schema for Phase 1: Structure Analysis
+const StructurePartSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  focus: z.string().describe('Specific instruction on what to focus on for this part'),
+  type: z.enum(['container', 'component', 'variant', 'single']),
+});
+
+const StructureAnalysisSchema = z.object({
+  type: z.enum(['single', 'composite', 'variants']),
+  rootName: z.string(),
+  rootRole: z.string().describe('Role of the root element (e.g. "Page", "Dashboard", "Component Set")'),
+  parts: z.array(StructurePartSchema),
+});
+
+type StructureAnalysis = z.infer<typeof StructureAnalysisSchema>;
+
 /**
  * Figma Analyzer Agent
  * Analyzes Figma designs and produces structured UI breakdown
  * 
- * Uses FigmaService directly to fetch design context from Figma,
- * then uses LLMService to parse and analyze the design data.
+ * Uses a two-phase approach:
+ * 1. Structure Analysis: Identifies logical parts (sub-views, variants)
+ * 2. Detailed Analysis: Analyzes each part deeply
+ * 3. Synthesis: Combines results into a unified structure
  */
 export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnalysisResult> {
   readonly name = 'FigmaAnalyzer';
@@ -56,112 +77,284 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       }
     }
 
-    // 1. Get design context from Figma using FigmaService directly
+    // 1. Get design context from Figma
     stream?.markdown(`\n**🎨 Fetching Figma design context...**\n`);
     stream?.markdown(`- Source: \`${input.nodeId || 'not provided'}\`\n`);
     if (effectiveNodeId !== input.nodeId && effectiveNodeId) {
       stream?.markdown(`- Cleaned Node ID: \`${effectiveNodeId}\`\n`);
     }
-    stream?.markdown(`- Force Code: ${input.forceCode || false}\n\n`);
-
-    console.log('[Helix] [FigmaAnalyzer] 🎨 Fetching Figma design context via FigmaService...');
-    console.log('[Helix] [FigmaAnalyzer] Original source:', input.nodeId);
-    console.log('[Helix] [FigmaAnalyzer] Effective nodeId:', effectiveNodeId);
-    console.log('[Helix] [FigmaAnalyzer] Input forceCode:', input.forceCode);
 
     const designContextResult = await this.figmaService.getDesignContext(ctx, effectiveNodeId, {
       forceCode: input.forceCode,
     });
 
-    console.log('[Helix] [FigmaAnalyzer] Design Context Result OK:', designContextResult.ok);
     if (!designContextResult.ok) {
       stream?.markdown(`\n❌ **Failed to get design context**\n`);
-      stream?.markdown(`Error: ${designContextResult.error?.message}\n\n`);
-      console.error('[Helix] [FigmaAnalyzer] ❌ Failed to get design context');
-      console.error('[Helix] [FigmaAnalyzer] Error:', JSON.stringify(designContextResult.error, null, 2));
       throw new Error(`Failed to get Figma design context: ${designContextResult.error?.message}`);
     }
 
     const designContext = designContextResult.data.content;
-    const isEmpty = !designContext || designContext.length === 0;
-
-    stream?.markdown(`\n✅ **Design Context Retrieved**\n`);
-    stream?.markdown(`- Length: ${designContext?.length || 0} characters\n`);
-    stream?.markdown(`- Empty: ${isEmpty ? '⚠️ YES' : 'No'}\n`);
-    if (!isEmpty) {
-      stream?.markdown(`- Preview: \`${designContext?.substring(0, 100)}...\`\n\n`);
-    } else {
-      stream?.markdown(`\n⚠️ **Warning: Design context is empty!**\n\n`);
+    
+    if (!designContext || designContext.length === 0) {
+       stream?.markdown(`\n⚠️ **Warning: Design context is empty!**\n\n`);
+       // Handle empty context gracefully if possible, or throw
+       return { schemaVersion: '1.0', root: { id: 'error', name: 'Error', role: 'Error', figmaRefs: [] } };
     }
 
-    console.log('[Helix] [FigmaAnalyzer] ✅ Design Context Retrieved');
-    console.log('[Helix] [FigmaAnalyzer] Design Context Length:', designContext?.length);
-    console.log('[Helix] [FigmaAnalyzer] Design Context Type:', typeof designContext);
-    console.log('[Helix] [FigmaAnalyzer] Design Context is Empty?:', isEmpty);
-    console.log('[Helix] [FigmaAnalyzer] Design Context Preview:', designContext?.substring(0, 500));
+    stream?.markdown(`\n✅ **Design Context Retrieved** (${designContext.length} chars)\n`);
 
-    // 2. Load prompt
-    const prompt = promptContent;
+    // ========================================================================
+    // Phase 1: Structure Analysis
+    // ========================================================================
+    stream?.markdown(`### 🏗️ Phase 1: Analyzing Structure...\n`);
+    console.log('[Helix] [FigmaAnalyzer] Phase 1 - Structure Analysis');
 
-    // 3. Call LLM with design context using LLMService directly
-    const messages = [
-      vscode.LanguageModelChatMessage.User(prompt),
-      vscode.LanguageModelChatMessage.User(
-        `Here is the Figma design data to analyze:\n\n${designContext}`
-      ),
-    ];
-
-    console.log('[Helix] [FigmaAnalyzer] === LLM Request Start (via LLMService) ===');
-    console.log('[Helix] [FigmaAnalyzer] Prompt length:', prompt.length);
-    console.log('[Helix] [FigmaAnalyzer] Messages count:', messages.length);
-    console.log('[Helix] [FigmaAnalyzer] Schema:', JSON.stringify(FigmaAnalysisResultSchema, null, 2));
-
-    const llmResult = await this.llmService.chatJSON(ctx, messages, {
-      name: 'FigmaAnalysisResult',
-      description: 'Structured analysis of Figma design',
-      schema: FigmaAnalysisResultSchema,
+    const structure = await this.performStructureAnalysis(ctx, designContext);
+    
+    stream?.markdown(`**Structure Type**: ${structure.type}\n`);
+    stream?.markdown(`**Root**: ${structure.rootName} (${structure.rootRole})\n`);
+    stream?.markdown(`**Parts identified**: ${structure.parts.length}\n`);
+    structure.parts.forEach(p => {
+       stream?.markdown(`- **${p.name}** [${p.type}]: ${p.description}\n`);
     });
+    stream?.markdown('\n');
 
-    console.log('[Helix] [FigmaAnalyzer] === LLM Request Complete ===');
-    console.log('[Helix] [FigmaAnalyzer] LLM Result OK:', llmResult.ok);
+    // ========================================================================
+    // Phase 2: Detailed Analysis per Part
+    // ========================================================================
+    stream?.markdown(`### 🔍 Phase 2: Detailed Analysis...\n`);
+    console.log('[Helix] [FigmaAnalyzer] Phase 2 - Detailed Analysis');
 
-    if (!llmResult.ok) {
-      console.error('[Helix] [FigmaAnalyzer] LLM Request Failed:', llmResult.error);
-      console.error('[Helix] [FigmaAnalyzer] Error details:', JSON.stringify(llmResult.error, null, 2));
-      throw new Error(`LLM request failed: ${llmResult.error?.message}`);
-    }
+    const partResults: FigmaAnalysisResult[] = [];
 
-    console.log('[Helix] [FigmaAnalyzer] LLM Result data keys:', Object.keys(llmResult.data || {}));
-    console.log('[Helix] [FigmaAnalyzer] LLM Result full data:', JSON.stringify(llmResult.data, null, 2).substring(0, 2000));
-    const result = llmResult.data as FigmaAnalysisResult;
-    console.log('[Helix] [FigmaAnalyzer] Result schemaVersion:', result.schemaVersion);
-    console.log('[Helix] [FigmaAnalyzer] Result root keys:', Object.keys(result.root || {}));
-    console.log('[Helix] [FigmaAnalyzer] Result cases length:', result.cases?.length);
+    // Parallel execution for parts? Or sequential to avoid rate limits?
+    // Let's do sequential for safety with LLM limits for now, or limited parallel.
+    for (const part of structure.parts) {
+      stream?.markdown(`Analyzing part: **${part.name}**...\n`);
 
-    // Add trace events
-    console.log('[Helix] [FigmaAnalyzer] Adding trace events');
-    console.log('[Helix] [FigmaAnalyzer] Current trace:', result.trace?.length || 0);
-    console.log('[Helix] [FigmaAnalyzer] Context trace events:', ctx.getTraceEvents().length);
+      let partContext = designContext;
 
-    if (!result.trace) {
-      result.trace = [];
-    }
-    result.trace.push(...ctx.getTraceEvents());
+      // Optimization: If the part has a specific Node ID different from the root, 
+      // fetch its specific context to reduce noise and context window usage.
+      if (part.id && part.id !== effectiveNodeId && part.id.includes(':')) {
+         try {
+            stream?.markdown(`  - ⬇️ Fetching specific details for node \`${part.id}\`...\n`);
+            const partResult = await this.figmaService.getDesignContext(ctx, part.id, {
+                forceCode: input.forceCode
+            });
+            if (partResult.ok && partResult.data?.content) {
+                partContext = partResult.data.content;
+                stream?.markdown(`  - ✅ Loaded specific context (${partContext.length} chars)\n`);
+            } else {
+                stream?.markdown(`  - ⚠️ Could not fetch specific details, using shared context.\n`);
+            }
+         } catch (fetchError) {
+             console.warn(`[Helix] [FigmaAnalyzer] Failed to fetch details for part ${part.id}`, fetchError);
+             stream?.markdown(`  - ⚠️ Fetch error, using shared context.\n`);
+         }
+      }
 
-    console.log('[Helix] [FigmaAnalyzer] Final trace length:', result.trace.length);
-    console.log('[Helix] [FigmaAnalyzer] Returning result with keys:', Object.keys(result));
-
-    // Emit display to the stream. Use detailed view in debug mode.
-    if (stream) {
-      if (isDebugMode()) {
-        this.displayFigmaAnalysisDetailed(result, stream);
-      } else {
-        this.displayFigmaAnalysisCompact(result, stream);
+      try {
+        const result = await this.analyzePart(ctx, partContext, part);
+        partResults.push(result);
+        console.log(`[Helix] [FigmaAnalyzer] Part '${part.name}' analyzed successfully.`);
+      } catch (err) {
+        console.error(`[Helix] [FigmaAnalyzer] Failed to analyze part '${part.name}':`, err);
+        stream?.markdown(`⚠️ Failed to analyze part **${part.name}**: ${(err as Error).message}\n`);
       }
     }
 
-    return result;
+    // ========================================================================
+    // Phase 3: Synthesis
+    // ========================================================================
+    stream?.markdown(`### 🧩 Phase 3: Synthesis...\n`);
+    const finalResult = this.synthesizeResults(structure, partResults);
+
+    // Add trace info
+    if (!finalResult.trace) {
+      finalResult.trace = [];
+    }
+    finalResult.trace.push(...ctx.getTraceEvents());
+
+    // Display final summary
+    if (stream) {
+      if (isDebugMode()) {
+        this.displayFigmaAnalysisDetailed(finalResult, stream);
+      } else {
+        this.displayFigmaAnalysisCompact(finalResult, stream);
+      }
+    }
+
+    return finalResult;
   }
+
+  /**
+   * Phase 1: Identity structure and break down
+   */
+  private async performStructureAnalysis(
+    ctx: ExecutionContext, 
+    context: string
+  ): Promise<StructureAnalysis> {
+    const messages = [
+      vscode.LanguageModelChatMessage.User(
+        `You are a Senior UI Architect. Analyze the provided Figma design data to understand its high-level structure.
+        
+        Determine if this design represents:
+        1. A **Single** component or view.
+        2. A **Composite** UI consisting of multiple distinct logical regions (e.g., Header, Sidebar, Content Area, Footer).
+        3. A **Variant** collection (e.g., Component Set with Primary/Secondary/Disabled states).
+        
+        Break down the design into logical **Parts** for detailed analysis. 
+        - If it's a huge page, split it into sub-views.
+        - If it's a component set, split into variants.
+        - If it's simple, keep it as a single part.
+        
+        For each part:
+        - **id**: MUST be the actual Figma Node ID found in the source (e.g. "123:456") if available.
+        - **type**: classify as 'container', 'component', 'variant', or 'single'.
+        - **focus**: Provide a specific instruction on what to look for.`
+      ),
+      vscode.LanguageModelChatMessage.User(
+        `Figma Design Context:\n\n${context}` 
+      ),
+    ];
+
+    const result = await this.llmService.chatJSON(ctx, messages, {
+      name: 'StructureAnalysis',
+      description: 'Breakdown of UI structure',
+      schema: StructureAnalysisSchema,
+    }, { caller: 'FigmaAnalyzerAgent.performStructureAnalysis' });
+
+    if (!result.ok) {
+      throw new Error(`Structure analysis failed: ${result.error?.message}`);
+    }
+
+    return result.data as StructureAnalysis;
+  }
+
+  /**
+   * Phase 2: Analyze a specific part
+   */
+  private async analyzePart(
+    ctx: ExecutionContext,
+    context: string,
+    part: { name: string, focus: string }
+  ): Promise<FigmaAnalysisResult> {
+     const messages = [
+      vscode.LanguageModelChatMessage.User(promptContent), // Base prompt
+      vscode.LanguageModelChatMessage.User(
+        `IMPORTANT: Focus your analysis ONLY on the following part of the design:
+        
+        **Target**: ${part.name}
+        **Focus**: ${part.focus}
+        
+        Ignore other unrelated parts of the design data if possible.
+        Return a complete 'FigmaAnalysisResult' struct for this part.`
+      ),
+      vscode.LanguageModelChatMessage.User(
+        `Figma Design Context:\n\n${context}`
+      ),
+    ];
+
+    const result = await this.llmService.chatJSON(ctx, messages, {
+      name: 'FigmaAnalysisResult',
+      description: `Detailed analysis of ${part.name}`,
+      schema: FigmaAnalysisResultSchema,
+    }, { caller: `FigmaAnalyzerAgent.analyzePart:${part.name}` });
+
+    if (!result.ok) {
+      throw new Error(`Part analysis failed for ${part.name}: ${result.error?.message}`);
+    }
+    
+    return result.data as FigmaAnalysisResult;
+  }
+
+  /**
+   * Phase 3: Synthesize results
+   */
+  private synthesizeResults(
+    structure: StructureAnalysis,
+    results: FigmaAnalysisResult[]
+  ): FigmaAnalysisResult {
+    if (results.length === 0) {
+      throw new Error('No analysis results produced.');
+    }
+
+    // Initialize with empty/default
+    const distinctCases: any[] = [];
+    type TokenSet = Set<string>;
+    const mergedTokens: {
+      typography: TokenSet;
+      colors: TokenSet;
+      spacing: TokenSet;
+      radius: TokenSet;
+      shadows: TokenSet;
+    }y[] = [];
+    const mergedTokens: any = {
+      typography: new Set(),
+      colors: new Set(),
+      spacing: new Set(),
+      radius: new Set(),
+      shadows: new Set(),
+    };
+
+    // Helper to merge arrays/sets
+    results.forEach(r => {
+      // Merge Cases
+      if (r.cases) distinctCases.push(...r.cases);
+      
+      // Merge Risks
+      if (r.risks) distinctRisks.push(...r.risks);
+      
+      // Merge Tokens
+      if (r.tokensHint) {
+        r.tokensHint.typography?.forEach(t => mergedTokens.typography.add(t));
+        r.tokensHint.colors?.forEach(t => mergedTokens.colors.add(t));
+        r.tokensHint.spacing?.forEach(t => mergedTokens.spacing.add(t));
+        r.tokensHint.radius?.forEach(t => mergedTokens.radius.add(t));
+        r.tokensHint.shadows?.forEach(t => mergedTokens.shadows.add(t));
+      }
+    });
+
+    // Construct Root
+    let root: any;
+
+    if (results.length === 1 && structure.type === 'single') {
+       // Direct pass-through if single
+       root = results[0].root;
+    } else {
+       // Synthetic root for Composite or Variants
+       root = {
+         id: 'root-synthetic',
+         name: structure.rootName,
+         role: structure.rootRole,
+         figmaRefs: [], // Could try to extract shared refs
+         layoutNotes: 'Synthetic root aggregation',
+         children: results.map(r => r.root),
+         variants: [], // If Variants type, maybe move children to variants? 
+       };
+       
+       // Special handling for variants type?
+       // Currently mapping everything as children is safest for "UI Structure"
+       // But if they are strictly variants of the same component, maybe we should structure differently.
+       // However, UIPart recursion uses `children`. Variants field in UIPart is for DiscoveredCaseSchema (states).
+       // So children is the correct structural composition.
+    }
+
+    return {
+      schemaVersion: '1.0',
+      root,
+      cases: distinctCases,
+      risks: distinctRisks,
+      tokensHint: {
+        typography: Array.from(mergedTokens.typography),
+        colors: Array.from(mergedTokens.colors),
+        spacing: Array.from(mergedTokens.spacing),
+        radius: Array.from(mergedTokens.radius),
+        shadows: Array.from(mergedTokens.shadows),
+      }
+    };
+  };
 
   /**
    * Compact display for Figma analysis result used in non-debug runs.

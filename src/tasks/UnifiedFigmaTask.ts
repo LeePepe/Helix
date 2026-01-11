@@ -12,6 +12,7 @@ import { isDebugMode } from '../utils/debug';
 import { PlannerAgent } from '../agents/PlannerAgent';
 import { CodeGeneratorAgent } from '../agents/CodeGeneratorAgent';
 import { ComparerAgent } from '../agents/ComparerAgent';
+import { CodeAnalyzerAgent } from '../agents/CodeAnalyzerAgent';
 import { summarizeContextForPlanner } from '../agents/utils/contextSummarizer';
 
 /**
@@ -27,6 +28,7 @@ export const UnifiedFigmaInputSchema = z.object({
 
   // Build mode
   designSystemPath: z.string().optional(),
+  filePaths: z.array(z.string()).optional(),
   forceCode: z.boolean().optional(),
 });
 
@@ -192,6 +194,9 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         break;
       case 'Comparer':
         agent = new ComparerAgent();
+      case 'CodeAnalyzer':
+        agent = new CodeAnalyzerAgent();
+        break;
         break;
       default:
         throw new Error(`Agent ${plan.agentName} not found`);
@@ -232,7 +237,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         break;
 
       case 'DesignSystemAnalyzer':
-        input.figmaAnalysis = agentResults['FigmaAnalyzer']?.figmaAnalysis;
+        input.figmaAnalysis = agentResults['FigmaAnalyzer'];
         input.designSystemPath = input.designSystemPath || taskInput.designSystemPath;
         console.log('[Helix] [DesignSystemAnalyzer] input.designSystemPath:', input.designSystemPath);
         console.log('[Helix] [DesignSystemAnalyzer] taskInput.designSystemPath:', taskInput.designSystemPath);
@@ -246,11 +251,15 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         }
         break;
 
+      case 'CodeAnalyzer':
+        input.filePaths = input.filePaths || taskInput.filePaths || [];
+        break;
+
       case 'Planner':
         input.goal = input.goal || 'Implement UI components from design';
         // Summarize context to avoid token limit issues
         input.context = summarizeContextForPlanner({
-          figmaAnalysis: agentResults['FigmaAnalyzer']?.figmaAnalysis,
+          figmaAnalysis: agentResults['FigmaAnalyzer'],
           designSystemMapping: agentResults['DesignSystemAnalyzer'],
           compareResult: agentResults['Comparer'],
         });
@@ -258,12 +267,12 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
       case 'CodeGenerator':
         // Pass subtask and context from Planner
-        const plan = agentResults['Planner'];
-        input.subtask = plan?.subtasks?.[0] || { title: 'Generate code', description: 'Generate code from design' };
+        const plannerResult = agentResults['Planner'];
+        input.subtask = plannerResult?.subtasks?.[0] || { title: 'Generate code', description: 'Generate code from design' };
         input.goal = input.goal || taskInput.userPrompt || 'Generate code from design';
         // Summarize context to avoid token limit issues
         input.context = summarizeContextForPlanner({
-          figmaAnalysis: agentResults['FigmaAnalyzer']?.figmaAnalysis,
+          figmaAnalysis: agentResults['FigmaAnalyzer'],
           designSystemMapping: agentResults['DesignSystemAnalyzer'],
           compareResult: agentResults['Comparer'],
         });
@@ -271,11 +280,13 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
       case 'Comparer':
         // Pass data from previous agents
-        input.figmaData = agentResults['FigmaAnalyzer']?.figmaAnalysis;
-        input.implementationContext = {
-          designSystemMapping: agentResults['DesignSystemAnalyzer'],
-          note: 'Implementation context from design system analysis',
-        };
+        input.figmaData = agentResults['FigmaAnalyzer'];
+        input.designSystem = agentResults['DesignSystemAnalyzer'];
+        
+        // Use CodeAnalyzer result if available
+        if (agentResults['CodeAnalyzer']) {
+           input.codeFiles = agentResults['CodeAnalyzer'].implementationContext;
+        }
         break;
     }
 
