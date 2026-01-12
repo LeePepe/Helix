@@ -104,3 +104,14 @@ export type UIPart = {
   children?: UIPart[];
   variants?: DiscoveredCase[];
 };
+
+// Reference to an external chat prompt or user-provided guidance
+export const ChatPromptReferenceSchema = z.object({
+  id: z.string().optional().describe('Optional identifier for the reference'),
+  title: z.string().optional().describe('Human-friendly title for the reference'),
+  description: z.string().optional().describe('Short description or notes about the reference'),
+  url: z.string().url().optional().describe('Optional URL pointing to the reference'),
+  content: z.string().optional().describe('Optional raw prompt content or excerpt'),
+});
+
+export type ChatPromptReference = z.infer<typeof ChatPromptReferenceSchema>;

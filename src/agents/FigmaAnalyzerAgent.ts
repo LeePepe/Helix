@@ -16,10 +16,11 @@ import promptContent from './prompts/figma-analyzer.md';
 export interface FigmaAnalyzerInput {
   nodeId?: string;
   forceCode?: boolean;
+  userRequest?: string; // User's original query/intent for focused analysis
 }
 
 // Internal schema for Phase 1: Structure Analysis
-const StructurePartSchema = z.object({
+const structurePartSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
@@ -27,14 +28,14 @@ const StructurePartSchema = z.object({
   type: z.enum(['container', 'component', 'variant', 'single']),
 });
 
-const StructureAnalysisSchema = z.object({
+const structureAnalysisSchema = z.object({
   type: z.enum(['single', 'composite', 'variants']),
   rootName: z.string(),
   rootRole: z.string().describe('Role of the root element (e.g. "Page", "Dashboard", "Component Set")'),
-  parts: z.array(StructurePartSchema),
+  parts: z.array(structurePartSchema),
 });
 
-type StructureAnalysis = z.infer<typeof StructureAnalysisSchema>;
+type StructureAnalysis = z.infer<typeof structureAnalysisSchema>;
 
 /**
  * Figma Analyzer Agent
@@ -98,7 +99,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     if (!designContext || designContext.length === 0) {
        stream?.markdown(`\n⚠️ **Warning: Design context is empty!**\n\n`);
        // Handle empty context gracefully if possible, or throw
-       return { schemaVersion: '1.0', root: { id: 'error', name: 'Error', role: 'Error', figmaRefs: [] } };
+       return { schemaVersion: '1.0', cases: [], root: { id: 'error', name: 'Error', role: 'Error', figmaRefs: [] } };
     }
 
     stream?.markdown(`\n✅ **Design Context Retrieved** (${designContext.length} chars)\n`);
@@ -107,10 +108,22 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     // Phase 1: Structure Analysis
     // ========================================================================
     stream?.markdown(`### 🏗️ Phase 1: Analyzing Structure...\n`);
+    if (input.userRequest) {
+      stream?.markdown(`**User Intent**: ${input.userRequest}\n`);
+    }
     console.log('[Helix] [FigmaAnalyzer] Phase 1 - Structure Analysis');
 
-    const structure = await this.performStructureAnalysis(ctx, designContext);
+    const structure = await this.performStructureAnalysis(ctx, designContext, input.userRequest);
     
+    // Debug: print structure rootName/rootRole to investigate undefined values in synthesis
+    try {
+      console.log('[Helix][FigmaAnalyzer] DEBUG structure.rootName:', structure?.rootName);
+      console.log('[Helix][FigmaAnalyzer] DEBUG structure.rootRole :', structure?.rootRole);
+      console.log('[Helix][FigmaAnalyzer] DEBUG structure (full):', JSON.stringify(structure, null, 2));
+    } catch (e) {
+      console.warn('[Helix][FigmaAnalyzer] DEBUG failed to log structure', e);
+    }
+
     stream?.markdown(`**Structure Type**: ${structure.type}\n`);
     stream?.markdown(`**Root**: ${structure.rootName} (${structure.rootRole})\n`);
     stream?.markdown(`**Parts identified**: ${structure.parts.length}\n`);
@@ -126,10 +139,10 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     console.log('[Helix] [FigmaAnalyzer] Phase 2 - Detailed Analysis');
 
     const partResults: FigmaAnalysisResult[] = [];
+    const MAX_PARALLEL = 4;
 
-    // Parallel execution for parts? Or sequential to avoid rate limits?
-    // Let's do sequential for safety with LLM limits for now, or limited parallel.
-    for (const part of structure.parts) {
+    // Helper function to analyze a single part
+    const analyzePartWithContext = async (part: typeof structure.parts[0]) => {
       stream?.markdown(`Analyzing part: **${part.name}**...\n`);
 
       let partContext = designContext;
@@ -156,18 +169,38 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
 
       try {
         const result = await this.analyzePart(ctx, partContext, part);
-        partResults.push(result);
         console.log(`[Helix] [FigmaAnalyzer] Part '${part.name}' analyzed successfully.`);
+        console.log(`[Helix] [FigmaAnalyzer] Part '${part.name}' result:`, JSON.stringify(result, null, 2));
+        return { success: true, result, part };
       } catch (err) {
         console.error(`[Helix] [FigmaAnalyzer] Failed to analyze part '${part.name}':`, err);
         stream?.markdown(`⚠️ Failed to analyze part **${part.name}**: ${(err as Error).message}\n`);
+        return { success: false, error: err, part };
       }
+    };
+
+    // Process parts in batches of MAX_PARALLEL
+    for (let i = 0; i < structure.parts.length; i += MAX_PARALLEL) {
+      const batch = structure.parts.slice(i, i + MAX_PARALLEL);
+      stream?.markdown(`\nProcessing batch ${Math.floor(i / MAX_PARALLEL) + 1} (${batch.length} parts in parallel)...\n`);
+      
+      const batchPromises = batch.map(part => analyzePartWithContext(part));
+      const batchResults = await Promise.all(batchPromises);
+      
+      // Collect successful results
+      batchResults.forEach(({ success, result }) => {
+        if (success && result) {
+          partResults.push(result);
+        }
+      });
     }
 
     // ========================================================================
     // Phase 3: Synthesis
     // ========================================================================
     stream?.markdown(`### 🧩 Phase 3: Synthesis...\n`);
+    console.log('[Helix] [FigmaAnalyzer] Phase 3 - Synthesis of results');
+    console.log('[Helix] [FigmaAnalyzer] Number of part results to synthesize:', partResults);
     const finalResult = this.synthesizeResults(structure, partResults);
 
     // Add trace info
@@ -178,12 +211,9 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
 
     // Display final summary
     if (stream) {
-      if (isDebugMode()) {
-        this.displayFigmaAnalysisDetailed(finalResult, stream);
-      } else {
-        this.displayFigmaAnalysisCompact(finalResult, stream);
-      }
+      this.displayFigmaAnalysisDetailed(finalResult, stream);
     }
+    console.log('[Helix] [FigmaAnalyzer] Analysis complete.', finalResult);
 
     return finalResult;
   }
@@ -193,26 +223,33 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
    */
   private async performStructureAnalysis(
     ctx: ExecutionContext, 
-    context: string
+    context: string,
+    userRequest?: string
   ): Promise<StructureAnalysis> {
     const messages = [
       vscode.LanguageModelChatMessage.User(
         `You are a Senior UI Architect. Analyze the provided Figma design data to understand its high-level structure.
-        
+
         Determine if this design represents:
         1. A **Single** component or view.
         2. A **Composite** UI consisting of multiple distinct logical regions (e.g., Header, Sidebar, Content Area, Footer).
         3. A **Variant** collection (e.g., Component Set with Primary/Secondary/Disabled states).
-        
+
         Break down the design into logical **Parts** for detailed analysis. 
         - If it's a huge page, split it into sub-views.
         - If it's a component set, split into variants.
         - If it's simple, keep it as a single part.
-        
+
+        IMPORTANT: The response MUST include top-level fields 'rootName' and 'rootRole' that describe the name and role of the design root (for example: "Dashboard" and "Page"). These fields are required for downstream synthesis. If the root cannot be determined from the context, return sensible defaults: 'rootName: "Unknown Root"', 'rootRole: "Unknown Role"'.
+
         For each part:
-        - **id**: MUST be the actual Figma Node ID found in the source (e.g. "123:456") if available.
+        - **id**: MUST be the actual Figma Node ID found in the source (e.g. "123:456" or "123-456") if available. If unknown, use an empty string.
         - **type**: classify as 'container', 'component', 'variant', or 'single'.
-        - **focus**: Provide a specific instruction on what to look for.`
+        - **focus**: Provide a specific instruction on what to look for.${
+          userRequest
+            ? `\n\n**IMPORTANT - User's Intent**: ${userRequest}\n\nFocus your analysis on parts that are relevant to this user request. Filter out unrelated components.`
+            : ''
+        }\n\nExample JSON output exactly matching the schema (no extra prose):\n\n{"type":"composite","rootName":"Dashboard","rootRole":"Page","parts":[{"id":"123:456","name":"Header","description":"Top navigation and brand area","focus":"Identify navigation items and brand behaviors","type":"container"}]}`
       ),
       vscode.LanguageModelChatMessage.User(
         `Figma Design Context:\n\n${context}` 
@@ -222,14 +259,35 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     const result = await this.llmService.chatJSON(ctx, messages, {
       name: 'StructureAnalysis',
       description: 'Breakdown of UI structure',
-      schema: StructureAnalysisSchema,
-    }, { caller: 'FigmaAnalyzerAgent.performStructureAnalysis' });
+      schema: structureAnalysisSchema,
+    });
 
     if (!result.ok) {
       throw new Error(`Structure analysis failed: ${result.error?.message}`);
     }
 
-    return result.data as StructureAnalysis;
+    // Ensure runtime safety: provide fallbacks if LLM returned undefined rootName/rootRole/parts
+    const data = result.data as Partial<StructureAnalysis> | undefined;
+
+    if (!data) {
+      throw new Error(`Structure analysis returned no data: ${result.error?.message}`);
+    }
+    console.log('[Helix][FigmaAnalyzer] Raw StructureAnalysis from LLM:', JSON.stringify(data, null, 2));
+    // Provide safe defaults to avoid undefined errors downstream
+    const safe: StructureAnalysis = {
+      type: (data.type as any) ?? 'single',
+      rootName: data.rootName ?? 'Unknown Root',
+      rootRole: data.rootRole ?? 'Unknown Role',
+      parts: Array.isArray(data.parts) && data.parts.length > 0 ? (data.parts as any) : [{
+        id: '',
+        name: data.rootName ?? 'root',
+        description: 'Auto-generated single part due to missing analysis parts.',
+        focus: 'Perform full analysis on the provided context',
+        type: 'single' as const,
+      }],
+    };
+    console.log('[Helix][FigmaAnalyzer] Safe StructureAnalysis:', JSON.stringify(safe, null, 2));
+    return safe;
   }
 
   /**
@@ -260,7 +318,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       name: 'FigmaAnalysisResult',
       description: `Detailed analysis of ${part.name}`,
       schema: FigmaAnalysisResultSchema,
-    }, { caller: `FigmaAnalyzerAgent.analyzePart:${part.name}` });
+    });
 
     if (!result.ok) {
       throw new Error(`Part analysis failed for ${part.name}: ${result.error?.message}`);
@@ -276,12 +334,24 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     structure: StructureAnalysis,
     results: FigmaAnalysisResult[]
   ): FigmaAnalysisResult {
+    // Debug: log incoming structure and results to trace undefined rootName/rootRole
+    try {
+      console.log('[Helix][FigmaAnalyzer] ENTER synthesizeResults. structure.type =', structure?.type);
+      console.log('[Helix][FigmaAnalyzer] ENTER synthesizeResults. structure.rootName =', structure?.rootName);
+      console.log('[Helix][FigmaAnalyzer] ENTER synthesizeResults. structure.rootRole =', structure?.rootRole);
+      console.log('[Helix][FigmaAnalyzer] ENTER synthesizeResults. structure (full) =', JSON.stringify(structure, null, 2));
+      console.log('[Helix][FigmaAnalyzer] ENTER synthesizeResults. results length =', results?.length);
+    } catch (e) {
+      console.warn('[Helix][FigmaAnalyzer] DEBUG synthesizeResults - failed to stringify structure', e);
+    }
+
     if (results.length === 0) {
       throw new Error('No analysis results produced.');
     }
 
     // Initialize with empty/default
     const distinctCases: any[] = [];
+    const distinctRisks: any[] = [];
     type TokenSet = Set<string>;
     const mergedTokens: {
       typography: TokenSet;
@@ -289,8 +359,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       spacing: TokenSet;
       radius: TokenSet;
       shadows: TokenSet;
-    }y[] = [];
-    const mergedTokens: any = {
+    } = {
       typography: new Set(),
       colors: new Set(),
       spacing: new Set(),
@@ -301,18 +370,22 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     // Helper to merge arrays/sets
     results.forEach(r => {
       // Merge Cases
-      if (r.cases) distinctCases.push(...r.cases);
+      if (r.cases) {
+        distinctCases.push(...r.cases);
+      }
       
       // Merge Risks
-      if (r.risks) distinctRisks.push(...r.risks);
+      if (r.risks) {
+        distinctRisks.push(...r.risks);
+      }
       
       // Merge Tokens
       if (r.tokensHint) {
-        r.tokensHint.typography?.forEach(t => mergedTokens.typography.add(t));
-        r.tokensHint.colors?.forEach(t => mergedTokens.colors.add(t));
-        r.tokensHint.spacing?.forEach(t => mergedTokens.spacing.add(t));
-        r.tokensHint.radius?.forEach(t => mergedTokens.radius.add(t));
-        r.tokensHint.shadows?.forEach(t => mergedTokens.shadows.add(t));
+        r.tokensHint.typography?.forEach((t: string) => mergedTokens.typography.add(t));
+        r.tokensHint.colors?.forEach((t: string) => mergedTokens.colors.add(t));
+        r.tokensHint.spacing?.forEach((t: string) => mergedTokens.spacing.add(t));
+        r.tokensHint.radius?.forEach((t: string) => mergedTokens.radius.add(t));
+        r.tokensHint.shadows?.forEach((t: string) => mergedTokens.shadows.add(t));
       }
     });
 
@@ -322,12 +395,20 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     if (results.length === 1 && structure.type === 'single') {
        // Direct pass-through if single
        root = results[0].root;
+
+       // Defensive: ensure required fields exist on the returned root
+       if (!root.name) {
+         root.name = structure.rootName ?? 'Unknown Root';
+       }
+       if (!root.role) {
+         root.role = structure.rootRole ?? 'Unknown Role';
+       }
     } else {
        // Synthetic root for Composite or Variants
        root = {
          id: 'root-synthetic',
-         name: structure.rootName,
-         role: structure.rootRole,
+         name: structure.rootName ?? 'Unknown Root',
+         role: structure.rootRole ?? 'Unknown Role',
          figmaRefs: [], // Could try to extract shared refs
          layoutNotes: 'Synthetic root aggregation',
          children: results.map(r => r.root),

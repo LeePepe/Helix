@@ -86,12 +86,12 @@ export abstract class BaseAgent<I, O> implements Agent<I, O> {
       // Validate output
       stream?.agentProgress(this.name, 'validating', 'Validating output');
       const outputValidation = this.outputSchema.safeParse(output);
-      console.log(`[Helix] [${this.name}] Validation result - success:`, outputValidation.success);
+      console.log(`[Helix] [${this.name}] Validation result - success:`, this.outputSchema, outputValidation.success);
       if (!outputValidation.success) {
         console.error(`[Helix] [${this.name}] Output validation failed`);
         console.error(`[Helix] [${this.name}] Validation errors:`, JSON.stringify(outputValidation.error.errors, null, 2));
         console.error(`[Helix] [${this.name}] Received output keys:`, Object.keys(output || {}));
-        console.error(`[Helix] [${this.name}] Received output sample:`, JSON.stringify(output, null, 2).substring(0, 1000));
+        console.error(`[Helix] [${this.name}] Received output:`, JSON.stringify(output, null, 2));
         throw new AppError(
           ErrorCodes.AGENT_VALIDATION_FAILED,
           `Output validation failed for ${this.name}`,

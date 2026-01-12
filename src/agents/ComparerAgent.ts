@@ -88,6 +88,41 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
     }
     result.trace.push(...ctx.getTraceEvents());
 
+    // Output formatted diff preview
+    if (stream && result.diffs.length > 0) {
+      stream.markdown(`\n#### Detailed Diff Preview\n${this.formatComparerPreview(result.diffs)}\n`);
+    }
+
     return result;
+  }
+
+  private formatComparerPreview(diffs: any[]): string {
+    const lines: string[] = [];
+
+    const toTitleCase = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+    const preview = diffs.slice(0, 10);
+    preview.forEach((diff: any, idx: number) => {
+      const severity = (diff?.severity || 'low').toLowerCase();
+      const severityIcon = severity === 'high' ? '🔴' : severity === 'medium' ? '🟡' : '⚪';
+      const category = toTitleCase(diff?.category || 'Other');
+      const description = (diff?.description || `Diff #${idx + 1}`).trim();
+
+      let filesPart = 'n/a';
+      if (Array.isArray(diff?.filePaths) && diff.filePaths.length > 0) {
+        const first = diff.filePaths[0];
+        const more = diff.filePaths.length - 1;
+        filesPart = more > 0 ? `${first} +${more} more` : first;
+      }
+
+      lines.push(`- ${severityIcon} **${category}** — ${description}`);
+      lines.push(`  - Files: ${filesPart}`);
+    });
+
+    if (diffs.length > preview.length) {
+      lines.push(`- …and ${diffs.length - preview.length} more differences`);
+    }
+
+    return lines.join('\n');
   }
 }

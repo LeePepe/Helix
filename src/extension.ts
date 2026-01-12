@@ -6,6 +6,19 @@ import { ConfigService } from './services/configService';
 export function activate(context: vscode.ExtensionContext) {
   console.log('Helix Design Workflows extension is activating...');
 
+  // Ensure debug mode detection works when running under F5 (extension development)
+  try {
+    if (context.extensionMode === vscode.ExtensionMode.Development || context.extensionMode === vscode.ExtensionMode.Test) {
+      process.env.HELIX_DEBUG = process.env.HELIX_DEBUG || '1';
+      if (!process.argv.includes('--helix-debug')) {
+        process.argv.push('--helix-debug');
+      }
+      console.log('HELIX DEBUG: Enabled by extension.activate for Development/Test mode');
+    }
+  } catch (e) {
+    // swallow errors so activation doesn't fail
+  }
+
   // Register chat participant
   const helixParticipant = new HelixParticipant(context);
   const participant = vscode.chat.createChatParticipant(

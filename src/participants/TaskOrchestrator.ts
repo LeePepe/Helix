@@ -67,12 +67,14 @@ export class TaskOrchestrator {
 
       // Execute task
       stream.markdown('## Building from Figma Design\n\n');
+      const userReferences = this.extractUserReferences(request);
       const task = new UnifiedFigmaTask();
       const result = await task.run(ctx, tools, artifacts, streamHandler, {
         userPrompt: request.prompt,
         nodeId,
         designSystemPath: this.configService.getDesignSystemPath(),
         predefinedAgents, // Pass predefined agent order from command
+        userReferences,
       });
 
       // Show summary
@@ -139,11 +141,13 @@ export class TaskOrchestrator {
       // Execute fit & finish task
       stream.markdown('## Fit & Finish Iterations\n\n');
       const task = new UnifiedFigmaTask();
+      const userReferences = request.references;
       const result = await task.run(ctx, tools, artifacts, streamHandler, {
         userPrompt: request.prompt,
         nodeId,
         designSystemPath: this.configService.getDesignSystemPath(),
         predefinedAgents, // Pass predefined agent order from command
+        userReferences,
       });
 
       // Show summary
@@ -206,6 +210,43 @@ export class TaskOrchestrator {
 
     console.log('[Helix] [TaskOrchestrator] ⚠️  No nodeId or Figma URL found in prompt');
     console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
+    return undefined;
+  }
+
+  /**
+   * Try to extract user-provided references from the chat request.
+   * Sources checked (in order):
+   * - request.metadata.userReferences (if provided by caller)
+   * - a `refs:` or `references:` block in the prompt where URLs/lines are separated by newlines
+   */
+  private extractUserReferences(request: vscode.ChatRequest): string[] | undefined {
+    try {
+      // Check metadata first (preferred)
+      // @ts-ignore - metadata may be present depending on invocation
+      const md = (request as any).metadata;
+      if (md && Array.isArray(md.userReferences)) {
+        console.log('[Helix] [TaskOrchestrator] ✅ Found userReferences in request.metadata');
+        return md.userReferences.filter((r: any) => typeof r === 'string');
+      }
+
+      // Look for a references block in the prompt: lines after 'refs:' or 'references:'
+      const prompt = request.prompt || '';
+      const refsMatch = prompt.match(/(?:refs|references)[:\s]*\n?([\s\S]*)$/i);
+      if (refsMatch && refsMatch[1]) {
+        const block = refsMatch[1].trim();
+        const lines = block.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        // Keep only lines that look like URLs or short notes
+        const refs = lines.filter(l => l.startsWith('http') || l.includes('.') || l.length < 200);
+        if (refs.length > 0) {
+          console.log('[Helix] [TaskOrchestrator] ✅ Extracted userReferences from prompt block');
+          return refs;
+        }
+      }
+    } catch (e) {
+      console.warn('[Helix] [TaskOrchestrator] Failed to extract userReferences', e);
+    }
+
+    console.log('[Helix] [TaskOrchestrator] No userReferences found');
     return undefined;
   }
 }

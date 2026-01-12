@@ -15,6 +15,9 @@ import { ChatService } from '../services/chatService';
 import { StreamHandler } from '../runtime/StreamHandler';
 import { isDebugMode } from '../utils/debug';
 import * as path from 'path';
+import * as crypto from 'crypto';
+import { ArtifactStoreFactory } from '../runtime/ArtifactStore';
+import { CacheService } from '../services/cacheService';
 
 /**
  * Input for the Design System Analyzer
@@ -82,6 +85,36 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
       contentLength: designSystemContent.length 
     });
 
+    // 1.5 Compute hash of the design system content and check cache
+    const hash = crypto.createHash('sha256').update(designSystemContent).digest('hex');
+    const workspaceRoot = ctx.workspaceInfo?.rootPath;
+    const artifactStore = ArtifactStoreFactory.create(workspaceRoot);
+    const cacheService = new CacheService(artifactStore);
+    const CACHE_RUN_ID = 'design-system-cache';
+
+    try {
+      const cached = await cacheService.get<DesignSystemAnalysisResult>(CACHE_RUN_ID, hash);
+      if (cached) {
+        console.log('[Helix] [DesignSystemAnalyzer] 🧠 Cache hit. Returning cached analysis for hash:', hash);
+        ctx.trace('agent', 'design-system-cache-hit', { hash });
+
+        if (stream) {
+          if (isDebugMode()) {
+            this.displayDesignSystemDetailed(cached, stream);
+          } else {
+            this.displayDesignSystemCompact(cached, stream);
+          }
+        }
+
+        return cached;
+      } else {
+        console.log('[Helix] [DesignSystemAnalyzer] 💾 No cache for hash. Proceeding with analysis. Hash:', hash);
+        ctx.trace('agent', 'design-system-cache-miss', { hash });
+      }
+    } catch (e) {
+      console.warn('[Helix] [DesignSystemAnalyzer] ⚠️ Cache check failed, continuing without cache.', e);
+    }
+
     // 2. Analyze design system content to identify domains and tokens
     console.log('[Helix] [DesignSystemAnalyzer] 📊 Analyzing design system domains...');
     const designDomains = await this.analyzeDesignSystemDomains(ctx, tools, designSystemContent);
@@ -127,6 +160,15 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
       } else {
         this.displayDesignSystemCompact(result, stream);
       }
+    }
+    
+    // 5.5 Cache the analysis result by file hash for future runs
+    try {
+      await cacheService.cache<DesignSystemAnalysisResult>(CACHE_RUN_ID, hash, result);
+      ctx.trace('agent', 'design-system-cache-store', { hash });
+      console.log('[Helix] [DesignSystemAnalyzer] 💾 Cached analysis result with key (hash):', hash);
+    } catch (e) {
+      console.warn('[Helix] [DesignSystemAnalyzer] ⚠️ Failed to cache analysis result.', e);
     }
     
     return result;

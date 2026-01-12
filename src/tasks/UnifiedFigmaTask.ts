@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ChatPromptReferenceSchema } from '../contracts/common';
 import { BaseTask } from './base/Task';
 import { CodegenResult, CodegenResultSchema, CompareResult } from '../contracts';
 import { ExecutionContext } from '../runtime/ExecutionContext';
@@ -13,6 +14,7 @@ import { PlannerAgent } from '../agents/PlannerAgent';
 import { CodeGeneratorAgent } from '../agents/CodeGeneratorAgent';
 import { ComparerAgent } from '../agents/ComparerAgent';
 import { CodeAnalyzerAgent } from '../agents/CodeAnalyzerAgent';
+import { LLMService } from '../services/llmService';
 import { summarizeContextForPlanner } from '../agents/utils/contextSummarizer';
 
 /**
@@ -22,6 +24,8 @@ export const UnifiedFigmaInputSchema = z.object({
   // Common
   userPrompt: z.string().optional().describe('User\'s natural language description of what they want'),
   nodeId: z.string().optional().describe('Figma node ID to analyze'),
+  // Optional list of user-provided chat prompt references to guide generation
+  userReferences: z.array(ChatPromptReferenceSchema).optional().describe('List of user-provided references (URLs or notes)'),
 
   // Predefined pipeline from command
   predefinedAgents: z.array(z.any()).optional().describe('Predefined agent execution plan from command'),
@@ -82,6 +86,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     console.log('[Helix] [UnifiedFigmaTask] Input nodeId:', input.nodeId);
     console.log('[Helix] [UnifiedFigmaTask] Input userPrompt:', input.userPrompt);
     console.log('[Helix] [UnifiedFigmaTask] Input designSystemPath:', input.designSystemPath);
+    console.log('[Helix] [UnifiedFigmaTask] Input userReferences:', input.userReferences);
     console.log('[Helix] [UnifiedFigmaTask] Input predefinedAgents:', input.predefinedAgents?.map(a => a.agentName).join(', '));
 
     // Validate that designSystemPath is provided at task level
@@ -91,30 +96,35 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
     // Step 1: Analyze user intent (with optional predefined agents)
     stream.markdown('## Analyzing Intent\n');
-    const intentAnalyzer = new IntentAnalyzerAgent();
 
-    const intentAnalysis = await intentAnalyzer.run(ctx, tools, {
-      userPrompt: input.userPrompt || 'Build UI from Figma design',
-      taskInput: input,
-      predefinedAgents: input.predefinedAgents, // Pass predefined agents from command
-    });
+    // If debug mode is enabled, skip intent analysis and force CodeAnalyzer only.
+    let intentAnalysis: any;
+    if (false) {
+      console.warn('[Helix] [DEBUG] Debug mode enabled. Skipping intent analysis and forcing CodeAnalyzer.');
+      stream.markdown('> ⚠️ **DEBUG MODE**: Skipping intent analysis. Only `CodeAnalyzer` will run.\n\n');
+      intentAnalysis = {
+        intent: 'Debug - Code Analysis Only',
+        reasoning: 'Debug mode shortcut: bypassing intent detection.',
+        selectedAgents: [
+          { agentName: 'CodeAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] }
+        ]
+      };
+      console.log('[Helix] [UnifiedFigmaTask] Selected agents (ordered):', intentAnalysis.selectedAgents.map((a: any) => a.agentName).join(', '));
+    } else {
+      const intentAnalyzer = new IntentAnalyzerAgent();
 
-    stream.markdown(`**Intent:** ${intentAnalysis.intent}\n`);
-    stream.markdown(`**Selected Agents:** ${intentAnalysis.selectedAgents.map(a => a.agentName).join(' → ')}\n`);
-    stream.markdown(`**Reasoning:** ${intentAnalysis.reasoning}\n\n`);
+      intentAnalysis = await intentAnalyzer.run(ctx, tools, {
+        userPrompt: input.userPrompt || 'Build UI from Figma design',
+        taskInput: input,
+        predefinedAgents: input.predefinedAgents, // Pass predefined agents from command
+      });
 
-    // // DEBUG: Only execute FigmaAnalyzer and DesignSystemAnalyzer to debug
-    // console.warn('[Helix] [DEBUG] Temporarily disabling other agents. Only FigmaAnalyzer and DesignSystemAnalyzer will run.');
-    // intentAnalysis.selectedAgents = intentAnalysis.selectedAgents.filter(
-    //   (a: any) =>  a.agentName === 'FigmaAnalyzer' || a.agentName === 'DesignSystemAnalyzer'
-    // );
-    // if (intentAnalysis.selectedAgents.length === 0) {
-    //   intentAnalysis.selectedAgents = [
-    //     { agentName: 'DesignSystemAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] },
-    //     { agentName: 'FigmaAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] }
-    //   ];
-    // }
-    // stream.markdown('> ⚠️ **DEBUG MODE**: Only `FigmaAnalyzer` and `DesignSystemAnalyzer` are enabled.\n\n');
+      stream.markdown(`**Intent:** ${intentAnalysis.intent}\n`);
+      const selectedNames = intentAnalysis.selectedAgents.map((a: any) => a.agentName);
+      console.log('[Helix] [UnifiedFigmaTask] Selected agents (ordered):', selectedNames.join(', '));
+      stream.markdown(`**Selected Agents:** ${selectedNames.join(' → ')}\n`);
+      stream.markdown(`**Reasoning:** ${intentAnalysis.reasoning}\n\n`);
+    }
 
     // Step 2: Execute workflow
     stream.markdown('## Executing Workflow\n');
@@ -194,19 +204,25 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         break;
       case 'Comparer':
         agent = new ComparerAgent();
+        break;
       case 'CodeAnalyzer':
-        agent = new CodeAnalyzerAgent();
+        agent = new CodeAnalyzerAgent(new LLMService());
         break;
         break;
       default:
         throw new Error(`Agent ${plan.agentName} not found`);
     }
 
+    console.log(`[Helix] [UnifiedFigmaTask] buildAgentInput for ${plan.agentName} - current agentResults keys:`, Object.keys(agentResults));
     // Build agent input from plan, previous results, and task input
     const agentInput = this.buildAgentInput(
       plan, agentResults, taskInput
     );
+    console.log(`[Helix] [UnifiedFigmaTask] Executing agent: ${plan.agentName} with input keys:`, Object.keys(agentInput));
 
+    if (plan.agentName === 'Comparer') {
+      console.log('[Helix] [UnifiedFigmaTask] Comparer selected - agentResults snapshot:', Object.keys(agentResults));
+    }
     // Execute agent with stream support
     const result = await agent.run(ctx, tools, agentInput, stream);
 
@@ -252,7 +268,8 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         break;
 
       case 'CodeAnalyzer':
-        input.filePaths = input.filePaths || taskInput.filePaths || [];
+        input.userPrompt = input.userPrompt || taskInput.userPrompt;
+        input.userReferences = input.userReferences || taskInput.userReferences;
         break;
 
       case 'Planner':
@@ -340,6 +357,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     let compareResult: any;
 
     for (const group of groups) {
+      console.log('[Helix] [UnifiedFigmaTask] Executing group:', group.map(g => g.agentName).join(', '));
       if (group.length === 1) {
         const plan = group[0];
         stream.progress(`Executing ${plan.agentName}...`);
@@ -351,13 +369,27 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         agentResults[plan.agentName] = result;
         executed.push(plan.agentName);
         
-        
-
-
         if (plan.agentName === 'CodeGenerator') {
           codegenResults = result?.codegenResults || [result];
         } else if (plan.agentName === 'Comparer') {
           compareResult = result;
+        }
+
+        // Debug: If CodeAnalyzer ran, log its result to help diagnose empty files
+        if (plan.agentName === 'CodeAnalyzer') {
+          try {
+            console.log('[Helix] [UnifiedFigmaTask] CodeAnalyzer result keys:', result ? Object.keys(result) : 'no-result');
+            const implCtx = result?.implementationContext;
+            if (implCtx && Array.isArray(implCtx.files)) {
+              console.log('[Helix] [UnifiedFigmaTask] CodeAnalyzer implementationContext.files.length:', implCtx.files.length);
+            } else if (implCtx) {
+              console.log('[Helix] [UnifiedFigmaTask] CodeAnalyzer implementationContext present but no files array:', typeof implCtx);
+            } else {
+              console.log('[Helix] [UnifiedFigmaTask] CodeAnalyzer implementationContext is empty or undefined');
+            }
+          } catch (e) {
+            console.warn('[Helix] [UnifiedFigmaTask] Failed to log CodeAnalyzer result', e);
+          }
         }
 
         // Display metrics for this agent
@@ -384,6 +416,35 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
             codegenResults = results[idx]?.codegenResults || [results[idx]];
           } else if (plan.agentName === 'Comparer') {
             compareResult = results[idx];
+            console.log('[Helix] [UnifiedFigmaTask] Comparer executed in parallel, result keys:', results[idx] ? Object.keys(results[idx]) : 'no-result');
+
+            // Stream comparer summary when available (parallel)
+            const res = results[idx];
+            if (res) {
+              try {
+                const score = typeof res.score === 'number' ? res.score : 'N/A';
+                const diffs = Array.isArray(res.diffs) ? res.diffs.length : 'unknown';
+                stream.markdown(`**Comparer:** Score: ${score} / 100 — Diffs: ${diffs}\n`);
+              } catch (e) {
+                console.warn('[Helix] [UnifiedFigmaTask] Failed to stream (parallel) Comparer result', e);
+              }
+            }
+          }
+          // Debug: If CodeAnalyzer ran in parallel, log its result
+          if (plan.agentName === 'CodeAnalyzer') {
+            try {
+              console.log('[Helix] [UnifiedFigmaTask] (parallel) CodeAnalyzer result keys:', result ? Object.keys(result) : 'no-result');
+              const implCtx = result?.implementationContext;
+              if (implCtx && Array.isArray(implCtx.files)) {
+                console.log('[Helix] [UnifiedFigmaTask] (parallel) CodeAnalyzer implementationContext.files.length:', implCtx.files.length);
+              } else if (implCtx) {
+                console.log('[Helix] [UnifiedFigmaTask] (parallel) CodeAnalyzer implementationContext present but no files array:', typeof implCtx);
+              } else {
+                console.log('[Helix] [UnifiedFigmaTask] (parallel) CodeAnalyzer implementationContext is empty or undefined');
+              }
+            } catch (e) {
+              console.warn('[Helix] [UnifiedFigmaTask] (parallel) Failed to log CodeAnalyzer result', e);
+            }
           }
         });
 
@@ -424,6 +485,5 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
     stream.markdown(`✅ Applied changes to ${filesWritten} files\n`);
   }
-
   
 }

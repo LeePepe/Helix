@@ -142,8 +142,7 @@ export class LLMService {
         const content = chatResult.data.content;
 
         console.log('[Helix] [LLMService] Raw LLM response length:', content.length);
-        console.log('[Helix] [LLMService] Raw LLM response (first 500 chars):', content.substring(0, 500));
-        console.log('[Helix] [LLMService] Raw LLM response (last 500 chars):', content.substring(Math.max(0, content.length - 500)));
+        console.log('[Helix] [LLMService] Raw LLM response (first 500 chars):', content);
 
         // Extract JSON from markdown code blocks if present
         let jsonText = content;
@@ -154,10 +153,7 @@ export class LLMService {
         } else {
           console.log('[Helix] [LLMService] No markdown code block found, attempting to parse raw content');
         }
-
-        console.log('[Helix] [LLMService] Attempting to parse JSON, length:', jsonText.length);
-        console.log('[Helix] [LLMService] JSON to parse (first 500 chars):', jsonText.substring(0, 500));
-
+        
         const parsed = JSON.parse(jsonText) as T;
 
         ctx.trace('service', 'llm-chat-json-complete', {

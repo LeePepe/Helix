@@ -26,7 +26,7 @@ export function setupTools(): ToolRegistry {
   const comparer = new ComparerAgent();
   const planner = new PlannerAgent();
   const codeGenerator = new CodeGeneratorAgent();
-  const codeAnalyzer = new CodeAnalyzerAgent();
+  const codeAnalyzer = new CodeAnalyzerAgent(llmService);
 
   // Register LLM tools
   registry.register({

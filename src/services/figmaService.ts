@@ -65,7 +65,7 @@ export class FigmaService {
       console.log('[Helix] [FigmaService] Input options:', JSON.stringify(options, null, 2));
 
       ctx.trace('service', 'figma-get-design-context', { nodeId, options });
-
+      
       const tools = vscode.lm.tools;
       console.log('[Helix] [FigmaService] Total available tools:', tools.length);
       console.log('[Helix] [FigmaService] Tool names:', tools.map(t => t.name));
@@ -99,10 +99,12 @@ export class FigmaService {
       };
 
       if (nodeId) {
-        // Pass nodeId directly - MCP tool can handle both node IDs and full URLs
-        params.nodeId = nodeId;
+        // Normalize nodeId format (accepts '123-456' or '123:456' or full URL)
+        const normalized = this.normalizeNodeId(nodeId);
+        params.nodeId = normalized;
         const isUrl = nodeId.includes('figma.com');
-        console.log(`[Helix] [FigmaService] 📌 Adding ${isUrl ? 'Figma URL' : 'nodeId'} to params:`, nodeId);
+        console.log(`[Helix] [FigmaService] 📌 Adding ${isUrl ? 'Figma URL' : 'nodeId'} to params:`,
+          { original: nodeId, normalized });
       } else {
         console.log('[Helix] [FigmaService] ⚠️  No nodeId provided - will use current selection');
       }
@@ -384,6 +386,37 @@ export class FigmaService {
       fileKey: fileKeyMatch?.[1],
       nodeId: nodeIdMatch?.[1]
     };
+  }
+
+  /**
+   * Normalize node ID formats to use ':' as separator (e.g. '123-456' -> '123:456')
+   * Accepts values already in '123:456' format and returns them unchanged.
+   */
+  private normalizeNodeId(nodeId?: string): string | undefined {
+    if (!nodeId) return undefined;
+
+    // If it's a full URL, extract node-id param
+    if (nodeId.includes('figma.com')) {
+      const parts = this.parseFigmaUrl(nodeId);
+      nodeId = parts.nodeId || nodeId;
+    }
+
+    // If already contains ':', assume normalized
+    if (nodeId.includes(':')) return nodeId;
+
+    // Convert dashed form '123-456' to '123:456'
+    const dashMatch = nodeId.match(/^(\d+)-(\d+)$/);
+    if (dashMatch) {
+      return `${dashMatch[1]}:${dashMatch[2]}`;
+    }
+
+    // If it contains non-digit separators like '_' or spaces, try to normalize
+    const otherMatch = nodeId.match(/^(\d+)[^\d]+(\d+)$/);
+    if (otherMatch) {
+      return `${otherMatch[1]}:${otherMatch[2]}`;
+    }
+
+    return nodeId;
   }
 
   /**
