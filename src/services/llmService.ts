@@ -95,7 +95,7 @@ export class LLMService {
   }
 
   /**
-   * Send a request expecting JSON response
+   * Send a request expecting JSON response with optional tool calling support
    */
   async chatJSON<T>(
     ctx: ExecutionContext,
@@ -105,6 +105,7 @@ export class LLMService {
       model?: string;
       temperature?: number;
       maxTokens?: number;
+      enableTools?: boolean; // Enable tool calling
     }
   ): Promise<ToolResult> {
     try {
@@ -205,5 +206,203 @@ export class LLMService {
         },
       };
     }
+  }
+
+  /**
+   * Send a request with tool calling support (no JSON mode)
+   * Allows LLM to invoke tools directly for file operations
+   */
+  async chatWithTools(
+    ctx: ExecutionContext,
+    messages: vscode.LanguageModelChatMessage[],
+    options?: {
+      model?: string;
+      temperature?: number;
+      maxTokens?: number;
+      toolInvocationToken?: vscode.ChatParticipantToolToken;
+    }
+  ): Promise<ToolResult> {
+    try {
+      console.log('[LLMService] chatWithTools called');
+      console.log('[LLMService] options:', options);
+      console.log('[LLMService] toolInvocationToken present:', !!options?.toolInvocationToken);
+      console.log('[LLMService] toolInvocationToken value:', options?.toolInvocationToken);
+
+      ctx.trace('service', 'llm-chat-with-tools-start', {
+        messageCount: messages.length,
+        model: options?.model || ctx.settings.model
+      });
+
+      // Get model
+      const modelId = options?.model || ctx.settings.model;
+      const models = await vscode.lm.selectChatModels({ family: modelId });
+
+      if (models.length === 0) {
+        return {
+          ok: false,
+          error: {
+            code: ErrorCodes.LLM_REQUEST_FAILED,
+            message: `No language model found for family: ${modelId}`,
+          },
+        };
+      }
+
+      const model = models[0];
+
+      // Get available tools and filter to only file-related tools
+      const allTools = vscode.lm.tools;
+      console.log('[LLMService] Total available tools:', allTools.length);
+
+      // Filter to only essential file operation tools
+      const allowedToolNames = [
+        'copilot_readFile',
+        'copilot_applyPatch',
+        'copilot_insertEdit',
+        'copilot_createFile',
+        'copilot_editFiles',
+        'copilot_replaceString',
+        'copilot_multiReplaceString',
+        'copilot_findFiles',
+        'copilot_findTextInFiles',
+        'copilot_listDirectory',
+        'copilot_searchCodebase',
+        'copilot_searchWorkspaceSymbols',
+        'copilot_getChangedFiles',
+      ];
+
+      const filteredTools = Array.from(allTools).filter(tool =>
+        allowedToolNames.includes(tool.name)
+      );
+
+      console.log('[LLMService] Filtered to essential tools:', filteredTools.map(t => t.name).join(', '));
+
+      // Send request with filtered tools
+      const requestOptions: vscode.LanguageModelChatRequestOptions = {
+        justification: 'Helix agent needs LLM with tool access for code generation',
+        tools: filteredTools.length > 0 ? filteredTools : undefined,
+      };
+
+      const response = await model.sendRequest(messages, requestOptions, ctx.cancellationToken);
+
+      // Process response with tool calls
+      const result = await this.processToolCalls(ctx, messages, model, response, requestOptions, options);
+
+      ctx.trace('service', 'llm-chat-with-tools-complete', {
+        responseLength: result.data?.content?.length || 0,
+      });
+
+      return result;
+    } catch (err) {
+      ctx.trace('service', 'llm-chat-with-tools-error', { error: (err as Error).message });
+
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.LLM_REQUEST_FAILED,
+          message: `LLM request with tools failed: ${(err as Error).message}`,
+          details: err instanceof AppError ? err.toJSON() : undefined,
+        },
+      };
+    }
+  }
+
+  /**
+   * Process tool calls in LLM response
+   */
+  private async processToolCalls(
+    ctx: ExecutionContext,
+    messages: vscode.LanguageModelChatMessage[],
+    model: vscode.LanguageModelChat,
+    response: vscode.LanguageModelChatResponse,
+    requestOptions: vscode.LanguageModelChatRequestOptions,
+    options?: { toolInvocationToken?: vscode.ChatParticipantToolToken }
+  ): Promise<ToolResult> {
+    let responseText = '';
+    const toolCalls: vscode.LanguageModelToolCallPart[] = [];
+
+    // Collect text and tool calls
+    for await (const part of response.stream) {
+      if (part instanceof vscode.LanguageModelTextPart) {
+        responseText += part.value;
+      } else if (part instanceof vscode.LanguageModelToolCallPart) {
+        toolCalls.push(part);
+      }
+      ctx.throwIfCancelled();
+    }
+
+    // If no tool calls, return the text response
+    if (toolCalls.length === 0) {
+      return {
+        ok: true,
+        data: { content: responseText },
+      };
+    }
+
+    // Execute tool calls
+    console.log(`[LLMService] Executing ${toolCalls.length} tool calls:`, toolCalls.map(tc => tc.name).join(', '));
+
+    // Add assistant message with tool calls
+    const contentParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
+    if (responseText) {
+      contentParts.push(new vscode.LanguageModelTextPart(responseText));
+    }
+    contentParts.push(...toolCalls);
+    messages.push(vscode.LanguageModelChatMessage.Assistant(contentParts));
+
+    // Execute tools and collect results
+    const toolResults = await this.executeTools(ctx, toolCalls, options?.toolInvocationToken);
+
+    // Add tool results as user message
+    const userMsg = vscode.LanguageModelChatMessage.User('');
+    userMsg.content = toolResults;
+    messages.push(userMsg);
+
+    // Continue the conversation with tool results
+    const followUpResponse = await model.sendRequest(messages, requestOptions, ctx.cancellationToken);
+    return await this.processToolCalls(ctx, messages, model, followUpResponse, requestOptions, options);
+  }
+
+  /**
+   * Execute tool calls
+   */
+  private async executeTools(
+    ctx: ExecutionContext,
+    toolCalls: vscode.LanguageModelToolCallPart[],
+    toolInvocationToken?: vscode.ChatParticipantToolToken
+  ): Promise<vscode.LanguageModelToolResultPart[]> {
+    const results: vscode.LanguageModelToolResultPart[] = [];
+
+    for (const toolCall of toolCalls) {
+      try {
+        console.log(`[LLMService] Invoking tool: ${toolCall.name}`);
+        console.log(`[LLMService] Tool input (full):`, JSON.stringify(toolCall.input, null, 2));
+        console.log(`[LLMService] toolInvocationToken present:`, !!toolInvocationToken);
+        console.log(`[LLMService] toolInvocationToken value:`, toolInvocationToken);
+
+        const result = await vscode.lm.invokeTool(
+          toolCall.name,
+          {
+            input: toolCall.input,
+            toolInvocationToken,
+          },
+          ctx.cancellationToken
+        );
+
+        results.push(new vscode.LanguageModelToolResultPart(toolCall.callId, result.content));
+        console.log(`[LLMService] Tool ${toolCall.name} executed successfully`);
+      } catch (toolError) {
+        const errorMsg = toolError instanceof Error ? toolError.message : String(toolError);
+        console.error(`[LLMService] Tool ${toolCall.name} failed:`, errorMsg);
+        console.error(`[LLMService] Tool error details:`, toolError);
+        results.push(
+          new vscode.LanguageModelToolResultPart(
+            toolCall.callId,
+            [new vscode.LanguageModelTextPart(`Error: ${errorMsg}`)]
+          )
+        );
+      }
+    }
+
+    return results;
   }
 }

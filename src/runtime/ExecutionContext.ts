@@ -145,7 +145,8 @@ export class ExecutionContext {
       runId || `${this.runId}-child-${Date.now()}`,
       this.workspaceInfo,
       this.settings,
-      this.cancellationToken
+      this.cancellationToken,
+      this.toolInvocationToken
     );
   }
 }

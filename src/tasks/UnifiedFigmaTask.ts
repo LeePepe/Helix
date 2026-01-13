@@ -99,14 +99,14 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
     // If debug mode is enabled, skip intent analysis and force CodeAnalyzer only.
     let intentAnalysis: any;
-    if (false) {
-      console.warn('[Helix] [DEBUG] Debug mode enabled. Skipping intent analysis and forcing CodeAnalyzer.');
-      stream.markdown('> ⚠️ **DEBUG MODE**: Skipping intent analysis. Only `CodeAnalyzer` will run.\n\n');
+    if (isDebugMode) {
+      console.warn('[Helix] [DEBUG] Debug mode enabled. Skipping intent analysis and forcing FigmaAnalyzer.');
+      stream.markdown('> ⚠️ **DEBUG MODE**: Skipping intent analysis. Only `FigmaAnalyzer` will run.\n\n');
       intentAnalysis = {
-        intent: 'Debug - Code Analysis Only',
+        intent: 'Debug - Figma Analysis Only',
         reasoning: 'Debug mode shortcut: bypassing intent detection.',
         selectedAgents: [
-          { agentName: 'CodeAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] }
+          { agentName: 'FigmaAnalyzer', executionOrder: 1, parallelGroup: 1, inputs: {}, dependencies: [] }
         ]
       };
       console.log('[Helix] [UnifiedFigmaTask] Selected agents (ordered):', intentAnalysis.selectedAgents.map((a: any) => a.agentName).join(', '));
@@ -123,6 +123,10 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
       const selectedNames = intentAnalysis.selectedAgents.map((a: any) => a.agentName);
       console.log('[Helix] [UnifiedFigmaTask] Selected agents (ordered):', selectedNames.join(', '));
       stream.markdown(`**Selected Agents:** ${selectedNames.join(' → ')}\n`);
+      if (intentAnalysis.focusAreas) {
+        stream.markdown(`**Focus Areas:** ${intentAnalysis.focusAreas}\n`);
+        console.log('[Helix] [UnifiedFigmaTask] Focus areas:', intentAnalysis.focusAreas);
+      }
       stream.markdown(`**Reasoning:** ${intentAnalysis.reasoning}\n\n`);
     }
 
@@ -137,7 +141,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     const executionGroups = this.groupByParallel(intentAnalysis.selectedAgents);
 
     const { executed: executedFromGroups, codegen: cgFromGroups = [], compare: cmpFromGroups } =
-      await this.executeGroups(executionGroups, {}, ctx, tools, artifacts, input, stream);
+      await this.executeGroups(executionGroups, {}, ctx, tools, artifacts, input, stream, intentAnalysis.focusAreas);
 
     executedAgents.push(...executedFromGroups);
     codegenResults = cgFromGroups || codegenResults;
@@ -185,7 +189,8 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     tools: ToolRegistry,
     artifacts: ArtifactStore,
     taskInput: UnifiedFigmaInput,
-    stream?: StreamHandler
+    stream?: StreamHandler,
+    focusAreas?: string
   ): Promise<any> {
     // Create agent instance dynamically based on agent name
     let agent: any;
@@ -216,7 +221,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     console.log(`[Helix] [UnifiedFigmaTask] buildAgentInput for ${plan.agentName} - current agentResults keys:`, Object.keys(agentResults));
     // Build agent input from plan, previous results, and task input
     const agentInput = this.buildAgentInput(
-      plan, agentResults, taskInput
+      plan, agentResults, taskInput, focusAreas
     );
     console.log(`[Helix] [UnifiedFigmaTask] Executing agent: ${plan.agentName} with input keys:`, Object.keys(agentInput));
 
@@ -241,9 +246,15 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
   private buildAgentInput(
     plan: AgentExecutionPlan,
     agentResults: AgentResults,
-    taskInput: UnifiedFigmaInput
+    taskInput: UnifiedFigmaInput,
+    focusAreas?: string
   ): any {
     const input: any = { ...plan.inputs };
+
+    // Add focusAreas to input if provided
+    if (focusAreas) {
+      input.focusAreas = focusAreas;
+    }
 
     // Map agent-specific inputs
     switch (plan.agentName) {
@@ -283,27 +294,55 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         break;
 
       case 'CodeGenerator':
-        // Pass subtask and context from Planner
-        const plannerResult = agentResults['Planner'];
-        input.subtask = plannerResult?.subtasks?.[0] || { title: 'Generate code', description: 'Generate code from design' };
         input.goal = input.goal || taskInput.userPrompt || 'Generate code from design';
-        // Summarize context to avoid token limit issues
-        input.context = summarizeContextForPlanner({
-          figmaAnalysis: agentResults['FigmaAnalyzer'],
-          designSystemMapping: agentResults['DesignSystemAnalyzer'],
-          compareResult: agentResults['Comparer'],
-        });
+
+        // Provide figmaAnalysis and designSystem for BUILD or FIX modes
+        input.figmaAnalysis = agentResults['FigmaAnalyzer'];
+        input.designSystem = agentResults['DesignSystemAnalyzer'];
+
+        // If Comparer result exists, it's FIX mode - provide compareResult and existingCode
+        if (agentResults['Comparer']) {
+          input.compareResult = agentResults['Comparer'];
+
+          // Get existing code paths from CodeAnalyzer if available
+          // CodeAnalyzer returns { implementationContext: { files: string[] } }
+          if (agentResults['CodeAnalyzer']?.implementationContext?.files) {
+            const filePaths = agentResults['CodeAnalyzer'].implementationContext.files;
+
+            // Convert string array to array of objects with path and empty content
+            // CodeGenerator will read the actual file contents
+            input.existingCode = (Array.isArray(filePaths) ? filePaths : []).map((path: string) => ({
+              path,
+              content: '', // Empty content - will be read by CodeGenerator
+            }));
+
+            console.log(`[UnifiedFigmaTask] Prepared ${input.existingCode.length} files for FIX mode:`,
+              input.existingCode.map((f: { path: string; content: string }) => f.path).join(', '));
+          }
+        }
+        // Otherwise it's BUILD mode - figmaAnalysis and designSystem are already set
         break;
 
       case 'Comparer':
         // Pass data from previous agents
         input.figmaData = agentResults['FigmaAnalyzer'];
         input.designSystem = agentResults['DesignSystemAnalyzer'];
-        
+
         // Use CodeAnalyzer result if available
         if (agentResults['CodeAnalyzer']) {
+           console.log('[Helix] [UnifiedFigmaTask] CodeAnalyzer result:', JSON.stringify(agentResults['CodeAnalyzer'], null, 2));
+           console.log('[Helix] [UnifiedFigmaTask] CodeAnalyzer implementationContext:', agentResults['CodeAnalyzer'].implementationContext);
+
            input.codeFiles = agentResults['CodeAnalyzer'].implementationContext;
+
+           console.log('[Helix] [UnifiedFigmaTask] Setting input.codeFiles to:', JSON.stringify(input.codeFiles, null, 2));
+           console.log('[Helix] [UnifiedFigmaTask] input.codeFiles type:', typeof input.codeFiles);
+           console.log('[Helix] [UnifiedFigmaTask] input.codeFiles.files:', input.codeFiles?.files);
+        } else {
+           console.log('[Helix] [UnifiedFigmaTask] No CodeAnalyzer result available');
         }
+
+        console.log('[Helix] [UnifiedFigmaTask] Final Comparer input.codeFiles:', JSON.stringify(input.codeFiles, null, 2));
         break;
     }
 
@@ -350,7 +389,8 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     tools: ToolRegistry,
     artifacts: ArtifactStore,
     taskInput: UnifiedFigmaInput,
-    stream: StreamHandler
+    stream: StreamHandler,
+    focusAreas?: string
   ): Promise<{ executed: string[]; codegen?: CodegenResult[]; compare?: any }> {
     const executed: string[] = [];
     let codegenResults: CodegenResult[] = [];
@@ -364,7 +404,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
         const beforeMetricsCount = ctx.getAgentMetrics().length;
 
-        const result = await this.executeAgent(plan, agentResults, ctx, tools, artifacts, taskInput, stream);
+        const result = await this.executeAgent(plan, agentResults, ctx, tools, artifacts, taskInput, stream, focusAreas);
 
         agentResults[plan.agentName] = result;
         executed.push(plan.agentName);
@@ -403,7 +443,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
         const beforeMetricsCount = ctx.getAgentMetrics().length;
 
         const results = await Promise.all(
-          group.map(plan => this.executeAgent(plan, agentResults, ctx, tools, artifacts, taskInput, stream))
+          group.map(plan => this.executeAgent(plan, agentResults, ctx, tools, artifacts, taskInput, stream, focusAreas))
         );
 
         group.forEach((plan, idx) => {

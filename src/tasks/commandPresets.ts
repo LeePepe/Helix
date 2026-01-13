@@ -82,6 +82,13 @@ export const FIT_AND_FINISH_PIPELINE: AgentExecutionPlan[] = [
     inputs: {},
     dependencies: ['FigmaAnalyzer', 'DesignSystemAnalyzer', 'CodeAnalyzer'],
   },
+  {
+    agentName: 'CodeGenerator',
+    executionOrder: 4,
+    parallelGroup: 4,
+    inputs: {},
+    dependencies: ['Comparer'],
+  }
 ];
 
 /**

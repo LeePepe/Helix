@@ -32,6 +32,60 @@ Compare and score the implementation:
 - Check accessibility requirements
 - Prioritize high-impact issues
 
+### Token-Based Comparison (CRITICAL)
+
+When the Design System Domain provides tokens (e.g., typography tokens, color tokens, spacing tokens, shadow tokens):
+
+1. **Token Usage Priority**:
+   - **FIRST** check if the implementation uses the correct token/variable name from the design system
+   - Token names may appear as: CSS variables (`--token-name`), class names (`.text-sm`), or direct references
+   - If the code uses the correct token name, this is considered correct implementation
+
+2. **Token Definition vs Implementation**:
+   - If the code uses the correct token BUT the token's actual values (size, weight, color, etc.) differ from Figma:
+     - Mark this as a **design system inconsistency** (not a code error)
+     - Severity: LOW (unless the difference is significant)
+     - Suggest updating the design system token definition
+
+3. **Missing Token Usage**:
+   - If the code uses hardcoded values instead of available design system tokens:
+     - Mark this as a **code issue**
+     - Severity: MEDIUM to HIGH
+     - Suggest replacing hardcoded values with the appropriate token
+
+4. **No Tokens Available**:
+   - Only compare raw values (colors, sizes, spacing, etc.) if no design system tokens exist for that domain
+   - In this case, report direct value mismatches as code issues
+
+**Examples**:
+
+```text
+Example 1 - Correct Token Usage:
+Figma: "Text/Body Regular" token → Inter 14pt Regular
+Code: Uses "text-body-regular" class → Inter 14pt Regular
+✅ Correct implementation
+
+Example 2 - Token Name Correct, Definition Mismatch:
+Figma: "Text/Body Regular" token → Inter 14pt Regular
+Code: Uses "text-body-regular" class → Inter 12pt Regular
+⚠️ Token used correctly, but design system token definition differs
+Severity: LOW (design system inconsistency)
+
+Example 3 - Wrong Token:
+Figma: "Text/Heading Large" token → Inter 24pt Bold
+Code: Uses "text-body-regular" class → Inter 14pt Regular
+❌ Wrong token used
+Severity: HIGH
+
+Example 4 - Hardcoded Instead of Token:
+Figma: "Text/Body Regular" token → Inter 14pt Regular
+Code: Hardcoded "font-size: 14px; font-weight: 400"
+❌ Should use design system token
+Severity: MEDIUM
+```
+
+This token-first approach applies to ALL domains: typography, colors, spacing, shadows, borders, etc.
+
 ## Output Schema
 Return valid JSON matching the CompareResult schema with schemaVersion "1.0".
 

@@ -83,13 +83,25 @@ export const DiscoveredCaseSchema = z.object({
 
 export type DiscoveredCase = z.infer<typeof DiscoveredCaseSchema>;
 
+export const TokensHintSchema = z.object({
+  typography: z.array(z.string()).optional(),
+  colors: z.array(z.string()).optional(),
+  spacing: z.array(z.string()).optional(),
+  radius: z.array(z.string()).optional(),
+  shadows: z.array(z.string()).optional(),
+}).optional();
+
+export type TokensHint = z.infer<typeof TokensHintSchema>;
+
 export const UIPartSchema: z.ZodType<any> = z.lazy(() =>
   z.object({
     id: z.string(),
     name: z.string(),
     role: z.string(), // human-readable e.g. "DialogHeader", "PrimaryButtonRow"
     figmaRefs: z.array(FigmaRefSchema),
+    rawFigmaData: z.string().optional().describe('Original Figma design context data for this component'),
     layoutNotes: z.string().optional(),
+    tokensHint: TokensHintSchema, // Design tokens specific to this component
     children: z.array(UIPartSchema).optional(),
     variants: z.array(DiscoveredCaseSchema).optional(),
   })
@@ -100,7 +112,9 @@ export type UIPart = {
   name: string;
   role: string;
   figmaRefs: FigmaRef[];
+  rawFigmaData?: string;
   layoutNotes?: string;
+  tokensHint?: TokensHint;
   children?: UIPart[];
   variants?: DiscoveredCase[];
 };

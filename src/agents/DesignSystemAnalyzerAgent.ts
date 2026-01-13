@@ -27,6 +27,8 @@ export interface DesignSystemAnalyzerInput {
   designSystemPath: string;
   /** Optional framework hint to improve analysis */
   framework?: string;
+  /** Optional focus areas to filter the analysis results (e.g., "typography, colors, spacing") */
+  focusAreas?: string;
 }
 
 /**
@@ -69,6 +71,7 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
     console.log('[Helix] [DesignSystemAnalyzer] 🚀 Execution started');
     console.log('[Helix] [DesignSystemAnalyzer] Input designSystemPath:', input.designSystemPath);
     console.log('[Helix] [DesignSystemAnalyzer] Input framework:', input.framework);
+    console.log('[Helix] [DesignSystemAnalyzer] Input focusAreas:', input.focusAreas);
     
     // 1. Read design system documentation using DesignSystemService
     let designSystemContent: string;
@@ -98,15 +101,22 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
         console.log('[Helix] [DesignSystemAnalyzer] 🧠 Cache hit. Returning cached analysis for hash:', hash);
         ctx.trace('agent', 'design-system-cache-hit', { hash });
 
+        // Apply focus area filtering if specified
+        let finalResult = cached;
+        if (input.focusAreas && input.focusAreas.trim()) {
+          console.log('[Helix] [DesignSystemAnalyzer] 🎯 Applying focus area filtering to cached result...');
+          finalResult = await this.filterByFocusAreas(ctx, cached, input.focusAreas, stream);
+        }
+
         if (stream) {
           if (isDebugMode()) {
-            this.displayDesignSystemDetailed(cached, stream);
+            this.displayDesignSystemDetailed(finalResult, stream);
           } else {
-            this.displayDesignSystemCompact(cached, stream);
+            this.displayDesignSystemCompact(finalResult, stream);
           }
         }
 
-        return cached;
+        return finalResult;
       } else {
         console.log('[Helix] [DesignSystemAnalyzer] 💾 No cache for hash. Proceeding with analysis. Hash:', hash);
         ctx.trace('agent', 'design-system-cache-miss', { hash });
@@ -153,15 +163,6 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
     console.log('[Helix] [DesignSystemAnalyzer] ✨ Analysis complete!');
     console.log('[Helix] [DesignSystemAnalyzer] Summary: Domains:', designDomains.length, '| Patterns:', componentPatterns.length);
     
-    // Emit display to the stream. Use detailed view in debug mode.
-    if (stream) {
-      if (isDebugMode()) {
-        this.displayDesignSystemDetailed(result, stream);
-      } else {
-        this.displayDesignSystemCompact(result, stream);
-      }
-    }
-    
     // 5.5 Cache the analysis result by file hash for future runs
     try {
       await cacheService.cache<DesignSystemAnalysisResult>(CACHE_RUN_ID, hash, result);
@@ -170,8 +171,24 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
     } catch (e) {
       console.warn('[Helix] [DesignSystemAnalyzer] ⚠️ Failed to cache analysis result.', e);
     }
-    
-    return result;
+
+    // 6. Apply focus area filtering if specified
+    let finalResult = result;
+    if (input.focusAreas && input.focusAreas.trim()) {
+      console.log('[Helix] [DesignSystemAnalyzer] 🎯 Applying focus area filtering...');
+      finalResult = await this.filterByFocusAreas(ctx, result, input.focusAreas, stream);
+    }
+
+    // 7. Display the results
+    if (stream) {
+      if (isDebugMode()) {
+        this.displayDesignSystemDetailed(finalResult, stream);
+      } else {
+        this.displayDesignSystemCompact(finalResult, stream);
+      }
+    }
+
+    return finalResult;
   }
 
   /**
@@ -586,6 +603,123 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
     } catch (error) {
       console.error('[Helix] [DesignSystemAnalyzer] [categorizeComponentPatterns] JSON parse failed:', error);
       return { allPatterns: patterns };
+    }
+  }
+
+  /**
+   * Filter design system analysis results based on user-specified focus areas
+   * Uses LLM to intelligently match focus areas with domains and patterns
+   */
+  private async filterByFocusAreas(
+    ctx: ExecutionContext,
+    result: DesignSystemAnalysisResult,
+    focusAreas: string,
+    stream?: StreamHandler
+  ): Promise<DesignSystemAnalysisResult> {
+    console.log('[Helix] [DesignSystemAnalyzer] [filterByFocusAreas] Filtering by focus areas:', focusAreas);
+
+    if (stream) {
+      stream.markdown(`\n🎯 Filtering results based on focus areas: **${focusAreas}**\n\n`);
+    }
+
+    // Build lists for LLM analysis
+    const domainsList = result.domains.map((d, i) => `${i}. ${d.name} - ${d.description || 'No description'}`).join('\n');
+    const patternsList = result.componentPatterns?.map((p, i) => `${i}. ${p}`).join('\n') || '';
+
+    const prompt = `
+      Analyze which design system domains and component patterns are relevant to the user's focus areas.
+
+      Focus Areas: ${focusAreas}
+
+      Available Domains:
+      ${domainsList}
+
+      Available Component Patterns:
+      ${patternsList}
+
+      INSTRUCTIONS:
+      1. Identify which domain indices are relevant to the focus areas
+      2. Identify which pattern indices are relevant to the focus areas
+      3. Be inclusive - if something might be related, include it
+      4. Return indices as arrays of numbers
+
+      Return ONLY a JSON object in this exact format:
+      {
+        "relevantDomainIndices": [0, 2, 5],
+        "relevantPatternIndices": [1, 3, 7],
+        "reasoning": "Brief explanation of why these were selected"
+      }
+    `;
+
+    const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+    const llmResult = await this.llmService.chat(ctx, messages);
+
+    if (!llmResult.ok) {
+      console.error('[Helix] [DesignSystemAnalyzer] [filterByFocusAreas] LLM request failed, returning unfiltered results');
+      if (stream) {
+        stream.markdown('⚠️ Failed to filter results, showing all results instead.\n\n');
+      }
+      return result;
+    }
+
+    try {
+      const response = llmResult.data.content;
+      const jsonMatch = response.match(/```(?:json)?\s*({[\s\S]*?})\s*```/) ||
+                      response.match(/({[\s\S]*})/) ||
+                      [null, response];
+
+      const jsonStr = jsonMatch ? jsonMatch[1] : response;
+      const filterResult: {
+        relevantDomainIndices: number[];
+        relevantPatternIndices: number[];
+        reasoning: string;
+      } = JSON.parse(jsonStr);
+
+      console.log('[Helix] [DesignSystemAnalyzer] [filterByFocusAreas] Filter result:', filterResult);
+
+      if (stream) {
+        stream.markdown(`📋 **Filtering reasoning:** ${filterResult.reasoning}\n\n`);
+      }
+
+      // Filter domains
+      const filteredDomains = filterResult.relevantDomainIndices
+        .filter(idx => idx >= 0 && idx < result.domains.length)
+        .map(idx => result.domains[idx]);
+
+      // Filter component patterns
+      const filteredPatterns = result.componentPatterns
+        ? filterResult.relevantPatternIndices
+            .filter(idx => idx >= 0 && idx < result.componentPatterns!.length)
+            .map(idx => result.componentPatterns![idx])
+        : [];
+
+      // Re-categorize filtered results
+      const filteredCategorizedDomains = filteredDomains.length > 0
+        ? await this.categorizeDomains(ctx, filteredDomains)
+        : {};
+
+      const filteredCategorizedPatterns = filteredPatterns.length > 0
+        ? await this.categorizeComponentPatterns(ctx, filteredPatterns)
+        : {};
+
+      if (stream) {
+        stream.markdown(`✅ Filtered to **${filteredDomains.length}** relevant domains and **${filteredPatterns.length}** relevant patterns\n\n`);
+      }
+
+      // Return filtered result
+      return {
+        ...result,
+        domains: filteredDomains,
+        componentPatterns: filteredPatterns,
+        categorizedDomains: filteredCategorizedDomains,
+        categorizedComponentPatterns: filteredCategorizedPatterns,
+      };
+    } catch (error) {
+      console.error('[Helix] [DesignSystemAnalyzer] [filterByFocusAreas] JSON parse failed:', error);
+      if (stream) {
+        stream.markdown('⚠️ Failed to parse filter results, showing all results instead.\n\n');
+      }
+      return result;
     }
   }
 }

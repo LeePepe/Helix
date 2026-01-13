@@ -52,6 +52,15 @@ export function setupTools(): ToolRegistry {
     },
   });
 
+  registry.register({
+    id: 'llm.chatWithTools',
+    name: 'LLM Chat With Tools',
+    description: 'Send chat messages with tool calling support (allows LLM to read/write files)',
+    execute: async (ctx: ExecutionContext, args: any) => {
+      return await llmService.chatWithTools(ctx, args.messages, args.options);
+    },
+  });
+
   // Register Figma tools
   registry.register({
     id: 'figma.checkMCP',

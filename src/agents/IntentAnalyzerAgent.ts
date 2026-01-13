@@ -32,6 +32,7 @@ export interface IntentAnalysisResult {
   selectedAgents: AgentExecutionPlan[];
   reasoning: string;
   estimatedTotalDuration: number;
+  focusAreas?: string;  // 用户关注的重点，如"字体、颜色、间距"，如果未指定则为空
 }
 
 /**
@@ -68,8 +69,8 @@ export class IntentAnalyzerAgent {
     }],
     ['CodeGenerator', {
       name: 'CodeGenerator',
-      description: 'Generates code based on design analysis and plan',
-      capabilities: ['code-generation', 'file-creation'],
+      description: 'Generates or fixes code based on design analysis or comparison results',
+      capabilities: ['code-generation', 'file-creation', 'code-fixing'],
       inputRequirements: ['figmaAnalysis or plan'],
       outputProvides: ['codegenResults'],
       estimatedDuration: 10,
@@ -128,6 +129,10 @@ Analyze the user's intent and determine:
 4. Which agents can run in parallel (same parallelGroup number)?
 5. What inputs does each agent need?
 6. What are the dependencies between agents?
+7. **IMPORTANT**: What specific design aspects is the user focusing on?
+   - Extract focus areas like: typography, colors, spacing, layout, sizing, borders, shadows, animations, responsive, accessibility
+   - If user mentions specific aspects, list them as comma-separated string
+   - If user doesn't specify any focus, set focusAreas to empty string (agents will process all aspects)
 
 Consider:
 - FigmaAnalyzer should run first if Figma data is needed
@@ -140,6 +145,7 @@ Respond in JSON format:
 {
   "intent": "brief description of what user wants",
   "reasoning": "explanation of why these agents were selected",
+  "focusAreas": "comma-separated focus areas (e.g., 'typography, colors, spacing') or empty string if not specified",
   "agents": [
     {
       "agentName": "AgentName",
@@ -187,6 +193,7 @@ Respond in JSON format:
         selectedAgents,
         reasoning: analysis.reasoning,
         estimatedTotalDuration,
+        focusAreas: analysis.focusAreas || '',  // Extract focus areas from LLM response
       };
 
       ctx.trace('agent', 'IntentAnalyzer-complete', { result });
@@ -213,6 +220,7 @@ Respond in JSON format:
       return {
         intent: 'Iterative refinement of implementation',
         reasoning: 'User wants to refine existing implementation',
+        focusAreas: '',  // No specific focus in default pipeline
         selectedAgents: [
           {
             agentName: 'FigmaAnalyzer',
@@ -250,6 +258,7 @@ Respond in JSON format:
       return {
         intent: 'Build UI components from Figma design',
         reasoning: 'User wants to generate new implementation from Figma',
+        focusAreas: '',  // No specific focus in default pipeline
         selectedAgents: [
           {
             agentName: 'FigmaAnalyzer',
@@ -317,6 +326,7 @@ Respond in JSON format:
         selectedAgents: predefinedAgents,
         reasoning: 'Using predefined agent order from command',
         estimatedTotalDuration: this.estimateDuration(predefinedAgents),
+        focusAreas: '',  // No specific focus without user prompt
       };
     }
 
@@ -334,11 +344,16 @@ You can:
 2. Skip agents that aren't needed
 3. Adjust parallel execution groups
 4. Modify agent inputs based on user prompt
+5. **IMPORTANT**: Extract what specific design aspects the user is focusing on
+   - Look for mentions of: typography, colors, spacing, layout, sizing, borders, shadows, animations, responsive, accessibility
+   - If user mentions specific aspects, list them as comma-separated string in focusAreas
+   - If user doesn't specify, set focusAreas to empty string
 
 Respond in JSON format:
 {
   "intent": "what user wants to accomplish",
   "reasoning": "why you kept/modified the pipeline",
+  "focusAreas": "comma-separated focus areas or empty string",
   "agents": [
     {
       "agentName": "AgentName",
@@ -402,6 +417,7 @@ Respond in JSON format:
         selectedAgents,
         reasoning: analysis.reasoning,
         estimatedTotalDuration: this.estimateDuration(selectedAgents),
+        focusAreas: analysis.focusAreas || '',  // Extract focus areas from refinement
       };
     } catch (error) {
       ctx.trace('agent', 'IntentAnalyzer-refinement-error', { error });
@@ -412,6 +428,7 @@ Respond in JSON format:
         selectedAgents: predefinedAgents,
         reasoning: 'Using predefined order (refinement failed)',
         estimatedTotalDuration: this.estimateDuration(predefinedAgents),
+        focusAreas: '',  // No focus on fallback
       };
     }
   }

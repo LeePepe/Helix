@@ -8,7 +8,7 @@ import { UIPartSchema, DiscoveredCaseSchema, IssueSchema, TraceEventSchema } fro
 export const FigmaAnalysisResultSchema = z.object({
   schemaVersion: z.literal('1.0'),
   root: UIPartSchema,
-  cases: z.array(DiscoveredCaseSchema), // cross-cutting scenarios
+  cases: z.array(DiscoveredCaseSchema).optional(), // cross-cutting scenarios (optional)
   tokensHint: z.object({
     typography: z.array(z.string()).optional(),
     colors: z.array(z.string()).optional(),
@@ -16,7 +16,7 @@ export const FigmaAnalysisResultSchema = z.object({
     radius: z.array(z.string()).optional(),
     shadows: z.array(z.string()).optional(),
   }).optional(),
-  risks: z.array(IssueSchema).optional(),
+  risks: z.array(IssueSchema).optional(), // risks (optional)
   trace: z.array(TraceEventSchema).optional(),
 });
 

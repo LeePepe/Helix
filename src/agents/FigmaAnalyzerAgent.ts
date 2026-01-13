@@ -78,16 +78,14 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       }
     }
 
-    // 1. Get design context from Figma
-    stream?.markdown(`\n**🎨 Fetching Figma design context...**\n`);
+    // 1. Get metadata from Figma
+    stream?.markdown(`\n**🎨 Fetching Figma metadata...**\n`);
     stream?.markdown(`- Source: \`${input.nodeId || 'not provided'}\`\n`);
     if (effectiveNodeId !== input.nodeId && effectiveNodeId) {
       stream?.markdown(`- Cleaned Node ID: \`${effectiveNodeId}\`\n`);
     }
 
-    const designContextResult = await this.figmaService.getDesignContext(ctx, effectiveNodeId, {
-      forceCode: input.forceCode,
-    });
+    const designContextResult = await this.figmaService.getMetadata(ctx, effectiveNodeId);
 
     if (!designContextResult.ok) {
       stream?.markdown(`\n❌ **Failed to get design context**\n`);
@@ -104,6 +102,16 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
 
     stream?.markdown(`\n✅ **Design Context Retrieved** (${designContext.length} chars)\n`);
 
+    // Debug mode: Output design context preview
+    if (stream && isDebugMode()) {
+      stream.markdown('\n<details>\n');
+      stream.markdown('<summary>🔍 Debug: Design Context Preview</summary>\n\n');
+      stream.markdown('```\n');
+      stream.markdown(designContext);
+      stream.markdown('\n```\n\n');
+      stream.markdown('</details>\n\n');
+    }
+
     // ========================================================================
     // Phase 1: Structure Analysis
     // ========================================================================
@@ -114,7 +122,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     console.log('[Helix] [FigmaAnalyzer] Phase 1 - Structure Analysis');
 
     const structure = await this.performStructureAnalysis(ctx, designContext, input.userRequest);
-    
+
     // Debug: print structure rootName/rootRole to investigate undefined values in synthesis
     try {
       console.log('[Helix][FigmaAnalyzer] DEBUG structure.rootName:', structure?.rootName);
@@ -124,6 +132,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       console.warn('[Helix][FigmaAnalyzer] DEBUG failed to log structure', e);
     }
 
+    stream?.markdown(`\n**✅ Structure Analysis Complete**\n\n`);
     stream?.markdown(`**Structure Type**: ${structure.type}\n`);
     stream?.markdown(`**Root**: ${structure.rootName} (${structure.rootRole})\n`);
     stream?.markdown(`**Parts identified**: ${structure.parts.length}\n`);
@@ -131,6 +140,16 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
        stream?.markdown(`- **${p.name}** [${p.type}]: ${p.description}\n`);
     });
     stream?.markdown('\n');
+
+    // Debug mode: Output raw structure analysis result
+    if (stream && isDebugMode()) {
+      stream.markdown('<details>\n');
+      stream.markdown('<summary>🔍 Debug: Phase 1 Raw Structure Analysis</summary>\n\n');
+      stream.markdown('```json\n');
+      stream.markdown(JSON.stringify(structure, null, 2));
+      stream.markdown('\n```\n\n');
+      stream.markdown('</details>\n\n');
+    }
 
     // ========================================================================
     // Phase 2: Detailed Analysis per Part
@@ -146,8 +165,9 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       stream?.markdown(`Analyzing part: **${part.name}**...\n`);
 
       let partContext = designContext;
+      let rawFigmaData = designContext; // Store the raw data
 
-      // Optimization: If the part has a specific Node ID different from the root, 
+      // Optimization: If the part has a specific Node ID different from the root,
       // fetch its specific context to reduce noise and context window usage.
       if (part.id && part.id !== effectiveNodeId && part.id.includes(':')) {
          try {
@@ -157,6 +177,7 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
             });
             if (partResult.ok && partResult.data?.content) {
                 partContext = partResult.data.content;
+                rawFigmaData = partResult.data.content; // Store specific raw data
                 stream?.markdown(`  - ✅ Loaded specific context (${partContext.length} chars)\n`);
             } else {
                 stream?.markdown(`  - ⚠️ Could not fetch specific details, using shared context.\n`);
@@ -169,24 +190,42 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
 
       try {
         const result = await this.analyzePart(ctx, partContext, part);
+
+        // Inject rawFigmaData into the root of the result
+        if (result.root) {
+          result.root.rawFigmaData = rawFigmaData;
+        }
+
         console.log(`[Helix] [FigmaAnalyzer] Part '${part.name}' analyzed successfully.`);
         console.log(`[Helix] [FigmaAnalyzer] Part '${part.name}' result:`, JSON.stringify(result, null, 2));
-        return { success: true, result, part };
+        stream?.markdown(`  - ✅ **${part.name}** analyzed successfully\n`);
+
+        // Debug mode: Output raw part analysis result
+        if (stream && isDebugMode()) {
+          stream.markdown(`  <details>\n`);
+          stream.markdown(`  <summary>🔍 Debug: ${part.name} Analysis Result</summary>\n\n`);
+          stream.markdown('  ```json\n');
+          stream.markdown(JSON.stringify(result, null, 2).split('\n').map(line => '  ' + line).join('\n'));
+          stream.markdown('\n  ```\n\n');
+          stream.markdown('  </details>\n\n');
+        }
+
+        return { success: true, result, part, rawFigmaData };
       } catch (err) {
         console.error(`[Helix] [FigmaAnalyzer] Failed to analyze part '${part.name}':`, err);
-        stream?.markdown(`⚠️ Failed to analyze part **${part.name}**: ${(err as Error).message}\n`);
-        return { success: false, error: err, part };
+        stream?.markdown(`  - ⚠️ Failed to analyze part **${part.name}**: ${(err as Error).message}\n`);
+        return { success: false, error: err, part, rawFigmaData };
       }
     };
 
     // Process parts in batches of MAX_PARALLEL
     for (let i = 0; i < structure.parts.length; i += MAX_PARALLEL) {
       const batch = structure.parts.slice(i, i + MAX_PARALLEL);
-      stream?.markdown(`\nProcessing batch ${Math.floor(i / MAX_PARALLEL) + 1} (${batch.length} parts in parallel)...\n`);
-      
+      stream?.markdown(`\n**Batch ${Math.floor(i / MAX_PARALLEL) + 1}**: Processing ${batch.length} part(s) in parallel...\n`);
+
       const batchPromises = batch.map(part => analyzePartWithContext(part));
       const batchResults = await Promise.all(batchPromises);
-      
+
       // Collect successful results
       batchResults.forEach(({ success, result }) => {
         if (success && result) {
@@ -195,13 +234,19 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
       });
     }
 
+    // Phase 2 Summary
+    stream?.markdown(`\n**✅ Phase 2 Complete**: Analyzed ${partResults.length}/${structure.parts.length} part(s) successfully\n\n`);
+
     // ========================================================================
     // Phase 3: Synthesis
     // ========================================================================
     stream?.markdown(`### 🧩 Phase 3: Synthesis...\n`);
     console.log('[Helix] [FigmaAnalyzer] Phase 3 - Synthesis of results');
     console.log('[Helix] [FigmaAnalyzer] Number of part results to synthesize:', partResults);
+
+    stream?.markdown(`Merging ${partResults.length} analysis result(s)...\n`);
     const finalResult = this.synthesizeResults(structure, partResults);
+    stream?.markdown(`✅ Synthesis complete\n\n`);
 
     // Add trace info
     if (!finalResult.trace) {
@@ -209,9 +254,114 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     }
     finalResult.trace.push(...ctx.getTraceEvents());
 
-    // Display final summary
+    // Debug mode: Output synthesis details
+    if (stream && isDebugMode()) {
+      stream.markdown('<details>\n');
+      stream.markdown('<summary>🔍 Debug: Phase 3 Synthesis Details</summary>\n\n');
+      stream.markdown(`**Input Structure:**\n`);
+      stream.markdown('```json\n');
+      stream.markdown(JSON.stringify({
+        type: structure.type,
+        rootName: structure.rootName,
+        rootRole: structure.rootRole,
+        partsCount: structure.parts.length
+      }, null, 2));
+      stream.markdown('\n```\n\n');
+      stream.markdown(`**Part Results Count:** ${partResults.length}\n\n`);
+      stream.markdown(`**Merged Statistics:**\n`);
+      stream.markdown(`- Cases: ${finalResult.cases?.length || 0}\n`);
+      stream.markdown(`- Risks: ${finalResult.risks?.length || 0}\n`);
+      stream.markdown(`- Color Tokens: ${finalResult.tokensHint?.colors?.length || 0}\n`);
+      stream.markdown(`- Typography Tokens: ${finalResult.tokensHint?.typography?.length || 0}\n`);
+      stream.markdown(`- Spacing Tokens: ${finalResult.tokensHint?.spacing?.length || 0}\n`);
+      stream.markdown('\n</details>\n\n');
+    }
+
+    // Stream output: Display analysis results before returning
     if (stream) {
-      this.displayFigmaAnalysisDetailed(finalResult, stream);
+      stream.markdown('\n---\n\n');
+      stream.markdown('### ✅ Figma Analysis Completed\n\n');
+
+      // Display root structure
+      stream.markdown('#### 🌳 Root Structure\n');
+      stream.markdown(`- **Name**: ${finalResult.root?.name || 'N/A'}\n`);
+      stream.markdown(`- **Role**: ${finalResult.root?.role || 'Unknown'}\n`);
+      if (finalResult.root?.layoutNotes) {
+        stream.markdown(`- **Layout**: ${finalResult.root.layoutNotes}\n`);
+      }
+      const childrenCount = finalResult.root?.children?.length || 0;
+      stream.markdown(`- **Children**: ${childrenCount}\n\n`);
+
+      // Display cases
+      if (finalResult.cases && finalResult.cases.length > 0) {
+        stream.markdown('#### 🧩 Cross-cutting Cases\n');
+        stream.markdown(`Found **${finalResult.cases.length}** case(s):\n`);
+        finalResult.cases.forEach((c, idx) => {
+          stream.markdown(`${idx + 1}. **${c.title}** (${c.id}): ${c.description}\n`);
+        });
+        stream.markdown('\n');
+      } else {
+        stream.markdown('#### 🧩 Cross-cutting Cases\n');
+        stream.markdown('No cross-cutting cases identified.\n\n');
+      }
+
+      // Display risks
+      if (finalResult.risks && finalResult.risks.length > 0) {
+        stream.markdown('#### ⚠️ Risks & Issues\n');
+        stream.markdown(`Found **${finalResult.risks.length}** risk(s):\n`);
+        finalResult.risks.forEach((issue, idx) => {
+          const emoji = issue.level === 'error' ? '❌' : issue.level === 'warning' ? '⚠️' : 'ℹ️';
+          stream.markdown(`${idx + 1}. ${emoji} **${issue.level.toUpperCase()}** (${issue.id}): ${issue.message}${issue.details ? ` — ${issue.details}` : ''}\n`);
+        });
+        stream.markdown('\n');
+      } else {
+        stream.markdown('#### ⚠️ Risks & Issues\n');
+        stream.markdown('No risks identified.\n\n');
+      }
+
+      // Display tokens
+      if (finalResult.tokensHint) {
+        stream.markdown('#### 🎨 Design Tokens\n');
+        const hints = finalResult.tokensHint;
+        let hasTokens = false;
+
+        if (hints.colors && hints.colors.length > 0) {
+          stream.markdown(`- **Colors** (${hints.colors.length}): ${hints.colors.slice(0, 5).join(', ')}${hints.colors.length > 5 ? '...' : ''}\n`);
+          hasTokens = true;
+        }
+        if (hints.typography && hints.typography.length > 0) {
+          stream.markdown(`- **Typography** (${hints.typography.length}): ${hints.typography.slice(0, 5).join(', ')}${hints.typography.length > 5 ? '...' : ''}\n`);
+          hasTokens = true;
+        }
+        if (hints.spacing && hints.spacing.length > 0) {
+          stream.markdown(`- **Spacing** (${hints.spacing.length}): ${hints.spacing.slice(0, 5).join(', ')}${hints.spacing.length > 5 ? '...' : ''}\n`);
+          hasTokens = true;
+        }
+        if (hints.radius && hints.radius.length > 0) {
+          stream.markdown(`- **Radius** (${hints.radius.length}): ${hints.radius.slice(0, 5).join(', ')}${hints.radius.length > 5 ? '...' : ''}\n`);
+          hasTokens = true;
+        }
+        if (hints.shadows && hints.shadows.length > 0) {
+          stream.markdown(`- **Shadows** (${hints.shadows.length}): ${hints.shadows.slice(0, 5).join(', ')}${hints.shadows.length > 5 ? '...' : ''}\n`);
+          hasTokens = true;
+        }
+
+        if (!hasTokens) {
+          stream.markdown('No design tokens detected.\n');
+        }
+        stream.markdown('\n');
+      }
+
+      // Debug mode: Output raw JSON
+      if (isDebugMode()) {
+        stream.markdown('#### 🔍 Debug: Raw Analysis Result\n\n');
+        stream.markdown('```json\n');
+        stream.markdown(JSON.stringify(finalResult, null, 2));
+        stream.markdown('\n```\n\n');
+      }
+
+      stream.markdown('---\n\n');
+      stream.markdown('🎉 **Analysis ready for code generation**\n\n');
     }
     console.log('[Helix] [FigmaAnalyzer] Analysis complete.', finalResult);
 
@@ -425,94 +575,18 @@ export class FigmaAnalyzerAgent extends BaseAgent<FigmaAnalyzerInput, FigmaAnaly
     return {
       schemaVersion: '1.0',
       root,
-      cases: distinctCases,
-      risks: distinctRisks,
-      tokensHint: {
+      cases: distinctCases.length > 0 ? distinctCases : undefined,
+      risks: distinctRisks.length > 0 ? distinctRisks : undefined,
+      tokensHint: (mergedTokens.typography.size > 0 || mergedTokens.colors.size > 0 ||
+                   mergedTokens.spacing.size > 0 || mergedTokens.radius.size > 0 ||
+                   mergedTokens.shadows.size > 0) ? {
         typography: Array.from(mergedTokens.typography),
         colors: Array.from(mergedTokens.colors),
         spacing: Array.from(mergedTokens.spacing),
         radius: Array.from(mergedTokens.radius),
         shadows: Array.from(mergedTokens.shadows),
-      }
+      } : undefined
     };
   };
 
-  /**
-   * Compact display for Figma analysis result used in non-debug runs.
-   */
-  private displayFigmaAnalysisCompact(result: FigmaAnalysisResult, stream: StreamHandler): void {
-    stream.markdown('\n---\n\n');
-    stream.markdown('### 🎨 Figma Analysis Summary\n');
-    
-    stream.markdown(`- **Root Element**: ${result.root?.name || 'N/A'} (${result.root?.role || 'Unknown'})\n`);
-    stream.markdown(`- **Cross-cutting Cases**: ${result.cases?.length || 0}\n`);
-    
-    const riskCount = result.risks?.length || 0;
-    if (riskCount > 0) {
-      stream.markdown(`- **Risks Identified**: ${riskCount}\n`);
-    } else {
-      stream.markdown(`- **Risks Identified**: None\n`);
-    }
-
-    const hasTokens = result.tokensHint && Object.keys(result.tokensHint).length > 0;
-    stream.markdown(`- **Tokens Detected**: ${hasTokens ? 'Yes' : 'No'}\n`);
-    
-    stream.markdown('\n---\n\n');
-  }
-
-  /**
-   * Detailed display for Figma analysis result used only in debug mode.
-   */
-  private displayFigmaAnalysisDetailed(result: FigmaAnalysisResult, stream: StreamHandler): void {
-    stream.markdown('\n---\n\n');
-    stream.markdown('### 🎨 Figma Analysis (DETAILED)\n');
-
-    // Root Element
-    if (result.root) {
-      stream.markdown('#### 🌳 Root Structure\n');
-      stream.markdown(`- **Name**: ${result.root.name}\n`);
-      stream.markdown(`- **Role**: ${result.root.role}\n`);
-      if (result.root.layoutNotes) {
-        stream.markdown(`- **Layout**: ${result.root.layoutNotes}\n`);
-      }
-      const childrenCount = result.root.children ? result.root.children.length : 0;
-      stream.markdown(`- **Children**: ${childrenCount}\n`);
-    }
-
-    // Cases
-    if (result.cases && result.cases.length > 0) {
-      stream.markdown('#### 🧩 Cross-cutting Cases\n');
-      let table = '| ID | Title | Description |\n| :--- | :--- | :--- |\n';
-      result.cases.forEach((c) => {
-        table += `| ${c.id} | ${c.title} | ${c.description} |\n`;
-      });
-      stream.markdown(table + '\n');
-    }
-
-    // Risks
-    if (result.risks && result.risks.length > 0) {
-      stream.markdown('#### ⚠️ Risks & Issues\n');
-      result.risks.forEach((issue) => {
-        stream.markdown(`- **${issue.level.toUpperCase()}** (${issue.id}): ${issue.message}${issue.details ? ` — ${issue.details}` : ''}\n`);
-      });
-      stream.markdown('\n');
-    }
-
-    // Tokens Hint
-    if (result.tokensHint) {
-      stream.markdown('#### 🎨 Tokens Hint\n');
-      const hints = result.tokensHint;
-      if (hints.colors && hints.colors.length > 0) {
-        stream.markdown(`- **Colors**: ${hints.colors.join(', ')}\n`);
-      }
-      if (hints.typography && hints.typography.length > 0) {
-        stream.markdown(`- **Typography**: ${hints.typography.join(', ')}\n`);
-      }
-      if (hints.spacing && hints.spacing.length > 0) {
-        stream.markdown(`- **Spacing**: ${hints.spacing.join(', ')}\n`);
-      }
-    }
-
-    stream.markdown('\n---\n\n');
-  }
 }
