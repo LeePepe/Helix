@@ -69,25 +69,20 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
     // Merge results
     const result = this.mergeResults(taskResults);
 
-    console.log('[Helix] [ComparerAgent] Final merged score:', result.score);
+    console.log('[Helix] [ComparerAgent] Comparison complete');
 
     if (stream) {
-      stream.markdown(`\n### Comparison Analysis (Score: ${result.score}/100)\n\n`);
+      stream.markdown(`\n### Comparison Analysis\n\n`);
 
       if (result.diffs.length > 0) {
           stream.markdown('#### Key Differences\n');
-          result.diffs.forEach(diff => {
+          result.diffs
+          .filter(diff => diff.severity === 'high' || diff.severity === 'medium')
+          .forEach(diff => {
               const severityIcon = diff.severity === 'high' ? '🔴' : diff.severity === 'medium' ? '🟡' : '⚪';
               stream.markdown(`- ${severityIcon} **${diff.category}**: ${diff.description}\n`);
           });
           stream.markdown('\n');
-      }
-
-      if (result.nextActions.length > 0) {
-          stream.markdown('#### Recommended Actions\n');
-          result.nextActions.forEach(action => {
-              stream.markdown(`- **${action.title}**: ${action.description}\n`);
-          });
       }
     }
 
@@ -95,11 +90,6 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
       result.trace = [];
     }
     result.trace.push(...ctx.getTraceEvents());
-
-    // Output formatted diff preview
-    if (stream && result.diffs.length > 0) {
-      stream.markdown(`\n#### Detailed Diff Preview\n${this.formatComparerPreview(result.diffs)}\n`);
-    }
 
     return result;
   }
@@ -234,7 +224,6 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
       // Return empty result on failure
       return {
         schemaVersion: '1.0' as const,
-        score: 0,
         diffs: [],
         nextActions: [],
       };
@@ -253,7 +242,7 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
       if (jsonMatch) {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
         result = JSON.parse(jsonStr) as CompareResult;
-        console.log(`[Helix] [ComparerAgent] Task ${taskId}: Score ${result.score}/100, ${result.diffs.length} diffs`);
+        console.log(`[Helix] [ComparerAgent] Task ${taskId}: ${result.diffs.length} diffs`);
       } else {
         throw new Error('No JSON found in response');
       }
@@ -264,7 +253,6 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
       // Return empty result on parse failure
       return {
         schemaVersion: '1.0' as const,
-        score: 0,
         diffs: [],
         nextActions: [{
           title: 'Parse error',
@@ -275,7 +263,7 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
     }
 
     if (stream) {
-      stream.markdown(`- ✓ ${uiPart.name} × ${domainName}: ${result.score}/100\n`);
+      stream.markdown(`- ✓ ${uiPart.name} × ${domainName}: ${result.diffs.length} diffs found\n`);
     }
 
     return result;
@@ -288,7 +276,6 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
     if (results.length === 0) {
       return {
         schemaVersion: '1.0' as const,
-        score: 0,
         diffs: [],
         nextActions: [],
       };
@@ -297,10 +284,6 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
     if (results.length === 1) {
       return results[0];
     }
-
-    // Calculate weighted average score
-    const totalScore = results.reduce((sum, r) => sum + r.score, 0);
-    const avgScore = Math.round(totalScore / results.length);
 
     // Merge all diffs
     const allDiffs: Diff[] = [];
@@ -328,7 +311,6 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
 
     return {
       schemaVersion: '1.0' as const,
-      score: avgScore,
       diffs: allDiffs,
       nextActions: Array.from(actionMap.values()),
       trace: allTraces.length > 0 ? allTraces : undefined,

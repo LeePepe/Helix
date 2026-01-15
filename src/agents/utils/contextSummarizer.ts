@@ -12,24 +12,13 @@ export interface SummarizedContext {
     rootRole: string;
     totalParts: number;
     maxDepth: number;
-    caseCount: number;
-    tokensHint?: {
-      typography?: string[];
-      colors?: string[];
-      spacing?: string[];
-      radius?: string[];
-      shadows?: string[];
-    };
     topLevelParts: Array<{
       id: string;
       name: string;
       role: string;
-      childCount: number;
     }>;
-    risks?: Array<{
-      level: string;
-      message: string;
-    }>;
+    metadataSize: number;
+    designContextSize: number;
   };
   designSystemMapping?: {
     schemaVersion: string;
@@ -43,7 +32,6 @@ export interface SummarizedContext {
   };
   compareResult?: {
     schemaVersion: string;
-    score: number;
     diffCount: number;
     highSeverityDiffs: Array<{
       category: string;
@@ -86,6 +74,7 @@ function calculateDepth(part: any, currentDepth = 1): number {
 function summarizeFigmaAnalysis(analysis: FigmaAnalysisResult): SummarizedContext['figmaAnalysis'] {
   const totalParts = countUIParts(analysis.root);
   const maxDepth = calculateDepth(analysis.root);
+  const rootParts = (analysis.root as any).parts || [];
 
   return {
     schemaVersion: analysis.schemaVersion,
@@ -93,18 +82,13 @@ function summarizeFigmaAnalysis(analysis: FigmaAnalysisResult): SummarizedContex
     rootRole: analysis.root.role,
     totalParts,
     maxDepth,
-    caseCount: analysis.cases.length,
-    tokensHint: analysis.tokensHint,
-    topLevelParts: (analysis.root.children || []).map((child: any) => ({
+    topLevelParts: rootParts.map((child: any) => ({
       id: child.id,
       name: child.name,
       role: child.role,
-      childCount: child.children?.length || 0,
     })),
-    risks: analysis.risks?.map(risk => ({
-      level: risk.level,
-      message: risk.message,
-    })),
+    metadataSize: analysis.metadata?.length || 0,
+    designContextSize: analysis.designContext?.length || 0,
   };
 }
 
@@ -112,17 +96,21 @@ function summarizeFigmaAnalysis(analysis: FigmaAnalysisResult): SummarizedContex
  * Summarize design system mapping to reduce token usage
  */
 function summarizeDesignSystemMapping(mapping: DesignSystemMappingResult): SummarizedContext['designSystemMapping'] {
+  const componentMappings = mapping.componentMappings || [];
+  const tokenMappings = mapping.tokenMappings || [];
+  const gaps = mapping.gaps || [];
+
   // Get high confidence mappings (>= 0.8)
-  const highConfidenceMappings = mapping.componentMappings
+  const highConfidenceMappings = componentMappings
     .filter(m => m.confidence >= 0.8)
     .map(m => `${m.uiPartId} → ${m.suggestedComponent}`);
 
   return {
     schemaVersion: mapping.schemaVersion,
-    componentMappingCount: mapping.componentMappings.length,
-    tokenMappingCount: mapping.tokenMappings.length,
+    componentMappingCount: componentMappings.length,
+    tokenMappingCount: tokenMappings.length,
     highConfidenceMappings,
-    gaps: mapping.gaps.map(gap => ({
+    gaps: gaps.map(gap => ({
       level: gap.level,
       message: gap.message,
     })),
@@ -144,7 +132,6 @@ function summarizeCompareResult(compareResult: CompareResult): SummarizedContext
 
   return {
     schemaVersion: compareResult.schemaVersion,
-    score: compareResult.score,
     diffCount: compareResult.diffs.length,
     highSeverityDiffs,
     nextActions: compareResult.nextActions.map(action => ({

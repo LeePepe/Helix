@@ -8,6 +8,11 @@ export interface FigmaUrlParts {
   nodeId?: string;
 }
 
+export interface ParsedFigmaUrls {
+  urls: FigmaUrlParts[];
+  nodeIds: string[];
+}
+
 /**
  * Figma service for MCP tool interactions
  * Unified service supporting both ExecutionContext (new) and direct calls (legacy)
@@ -47,6 +52,13 @@ export class FigmaService {
   }
 
   /**
+   * Helper function to delay execution
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Get design context from Figma
    * @param nodeId - Can be a node ID (e.g., "123:456") or a full Figma URL (e.g., "https://figma.com/design/ABC/name?node-id=123-456")
    *                 The MCP tool will automatically extract the node ID from the URL if provided.
@@ -59,121 +71,99 @@ export class FigmaService {
       includeCodeConnect?: boolean;
     }
   ): Promise<ToolResult> {
-    try {
-      console.log('[Helix] [FigmaService] ========== getDesignContext START ==========');
-      console.log('[Helix] [FigmaService] Input nodeId (or URL):', nodeId);
-      console.log('[Helix] [FigmaService] Input options:', JSON.stringify(options, null, 2));
+    const maxRetries = 1;
+    const retryDelayMs = 2000;
 
-      ctx.trace('service', 'figma-get-design-context', { nodeId, options });
-      
-      const tools = vscode.lm.tools;
-      console.log('[Helix] [FigmaService] Total available tools:', tools.length);
-      console.log('[Helix] [FigmaService] Tool names:', tools.map(t => t.name));
+    const tools = vscode.lm.tools;
+    const designContextTool = tools.find(t =>
+      t.name === 'mcp_figma-desktop_get_design_context'
+    );
 
-      const designContextTool = tools.find(t =>
-        t.name === 'mcp_figma-desktop_get_design_context'
-      );
-
-      if (!designContextTool) {
-        console.error('[Helix] [FigmaService] ❌ Design context tool not found!');
-        return {
-          ok: false,
-          error: {
-            code: ErrorCodes.FIGMA_MCP_NOT_AVAILABLE,
-            message: 'Figma Desktop MCP tool not available',
-          },
-        };
-      }
-
-      console.log('[Helix] [FigmaService] ✅ Found design context tool');
-      console.log('[Helix] [FigmaService] Tool info:', {
-        name: designContextTool.name,
-        description: designContextTool.description,
-        inputSchema: designContextTool.inputSchema,
-      });
-
-      // Build parameters
-      const params: any = {
-        clientLanguages: ctx.workspaceInfo.language || 'unknown',
-        clientFrameworks: ctx.workspaceInfo.framework || 'unknown',
+    if (!designContextTool) {
+      console.error('[FigmaService] Design context tool not found');
+      return {
+        ok: false,
+        error: {
+          code: ErrorCodes.FIGMA_MCP_NOT_AVAILABLE,
+          message: 'Figma Desktop MCP tool not available',
+        },
       };
+    }
 
-      if (nodeId) {
-        // Normalize nodeId format (accepts '123-456' or '123:456' or full URL)
-        const normalized = this.normalizeNodeId(nodeId);
-        params.nodeId = normalized;
-        const isUrl = nodeId.includes('figma.com');
-        console.log(`[Helix] [FigmaService] 📌 Adding ${isUrl ? 'Figma URL' : 'nodeId'} to params:`,
-          { original: nodeId, normalized });
-      } else {
-        console.log('[Helix] [FigmaService] ⚠️  No nodeId provided - will use current selection');
-      }
+    // Build parameters
+    const params: any = {
+      clientLanguages: 'swift',
+      clientFrameworks: ctx.workspaceInfo.framework || 'unknown',
+    };
 
-      if (options?.forceCode) {
-        params.forceCode = true;
-        console.log('[Helix] [FigmaService] 🔧 forceCode enabled');
-      }
+    if (nodeId) {
+      params.nodeId = this.normalizeNodeId(nodeId);
+    }
 
-      console.log('[Helix] [FigmaService] 📤 Invoking MCP tool with params:');
-      console.log('[Helix] [FigmaService] Params:', JSON.stringify(params, null, 2));
+    if (options?.forceCode) {
+      params.forceCode = true;
+    }
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      ctx.trace('service', 'figma-get-design-context', { nodeId, options, attempt });
 
       // Invoke tool
       const result = await vscode.lm.invokeTool(
         designContextTool.name,
-        { 
+        {
           input: params,
           toolInvocationToken: ctx.toolInvocationToken
         },
         ctx.cancellationToken
       );
-      console.log('[Helix] [FigmaService] ', result);
-      console.log('[Helix] [FigmaService] 📥 MCP tool invocation complete');
-      console.log('[Helix] [FigmaService] Result content parts:', result.content.length);
-      console.log('[Helix] [FigmaService] Result content types:', result.content.map((part: any) => part.constructor.name));
 
       // Collect result - LanguageModelToolResult.content is an array
       const content = result.content.map(part => {
         if (part instanceof vscode.LanguageModelTextPart) {
-          console.log('[Helix] [FigmaService] Text part length:', part.value.length);
-          console.log('[Helix] [FigmaService] Text part preview:', part.value.substring(0, 200));
           return part.value;
         }
-        console.log('[Helix] [FigmaService] Non-text part:', (part as any).constructor.name);
         return '';
       }).join('');
 
-      console.log('[Helix] [FigmaService] 📊 Final content length:', content.length);
-      console.log('[Helix] [FigmaService] Final content preview:', content.substring(0, 500));
-      console.log('[Helix] [FigmaService] Content is empty?:', content.length === 0);
-      console.log('[Helix] [FigmaService] Content is "Nothing is selected"?:', content.includes('Nothing is selected'));
+      // Check if the response contains an error message (MCP tool may return error as content)
+      if (content.includes('An error occurred while using the tool')) {
+        console.warn(`[FigmaService] getDesignContext returned error content (attempt ${attempt}/${maxRetries}): ${content} ${nodeId}`);
+
+        if (attempt === maxRetries) {
+          return {
+            ok: false,
+            error: {
+              code: ErrorCodes.FIGMA_REQUEST_FAILED,
+              message: `Figma MCP tool error after ${maxRetries} attempts: ${content}`,
+            },
+          };
+        }
+
+        // Wait before retrying
+        console.log(`[FigmaService] Retrying getDesignContext in ${retryDelayMs}ms...`);
+        await this.delay(retryDelayMs);
+        continue;
+      }
 
       ctx.trace('service', 'figma-get-design-context-complete', {
         resultSize: content.length,
+        attempt,
       });
-
-      console.log('[Helix] [FigmaService] ========== getDesignContext END ==========');
 
       return {
         ok: true,
         data: { content },
       };
-    } catch (err) {
-      console.error('[Helix] [FigmaService] ❌ ERROR in getDesignContext');
-      console.error('[Helix] [FigmaService] Error message:', (err as Error).message);
-      console.error('[Helix] [FigmaService] Error stack:', (err as Error).stack);
-
-      ctx.trace('service', 'figma-get-design-context-error', {
-        error: (err as Error).message,
-      });
-
-      return {
-        ok: false,
-        error: {
-          code: ErrorCodes.FIGMA_REQUEST_FAILED,
-          message: `Failed to get Figma design context: ${(err as Error).message}`,
-        },
-      };
     }
+
+    // This should never be reached, but TypeScript needs it
+    return {
+      ok: false,
+      error: {
+        code: ErrorCodes.FIGMA_REQUEST_FAILED,
+        message: 'Unexpected error in getDesignContext retry loop',
+      },
+    };
   }
 
   /**
@@ -202,7 +192,7 @@ export class FigmaService {
       }
 
       const params: any = {
-        clientLanguages: ctx.workspaceInfo.language || 'unknown',
+        clientLanguages: 'swift',
         clientFrameworks: ctx.workspaceInfo.framework || 'unknown',
       };
 
@@ -252,7 +242,7 @@ export class FigmaService {
       ctx.trace('service', 'figma-get-screenshot', { nodeId });
 
       const tools = vscode.lm.tools;
-      const screenshotTool = tools.find(t => 
+      const screenshotTool = tools.find(t =>
         t.name === 'mcp_figma-desktop_get_screenshot'
       );
 
@@ -267,7 +257,7 @@ export class FigmaService {
       }
 
       const params: any = {
-        clientLanguages: ctx.workspaceInfo.language || 'unknown',
+        clientLanguages: 'swift',
         clientFrameworks: ctx.workspaceInfo.framework || 'unknown',
       };
 
@@ -317,7 +307,7 @@ export class FigmaService {
       ctx.trace('service', 'figma-get-variables', { nodeId });
 
       const tools = vscode.lm.tools;
-      const variableTool = tools.find(t => 
+      const variableTool = tools.find(t =>
         t.name === 'mcp_figma-desktop_get_variable_defs'
       );
 
@@ -332,7 +322,7 @@ export class FigmaService {
       }
 
       const params: any = {
-        clientLanguages: ctx.workspaceInfo.language || 'unknown',
+        clientLanguages: 'swift',
         clientFrameworks: ctx.workspaceInfo.framework || 'unknown',
       };
 
@@ -386,6 +376,45 @@ export class FigmaService {
       fileKey: fileKeyMatch?.[1],
       nodeId: nodeIdMatch?.[1]
     };
+  }
+
+  /**
+   * Parse multiple Figma URLs from a string input
+   * Supports URLs separated by spaces, newlines, or commas
+   * @param input - String containing one or more Figma URLs
+   * @returns Parsed URLs with their node IDs
+   */
+  parseMultipleFigmaUrls(input: string): ParsedFigmaUrls {
+    console.log('[Helix] [FigmaService] parseMultipleFigmaUrls input:', input);
+    console.log('[Helix] [FigmaService] parseMultipleFigmaUrls input length:', input.length);
+
+    // Split by common separators: newlines, commas, or multiple spaces
+    const urlPattern = /https?:\/\/[^\s,]+figma\.com[^\s,]*/gi;
+    const matches = input.match(urlPattern) || [];
+
+    console.log('[Helix] [FigmaService] parseMultipleFigmaUrls matches:', matches);
+    console.log('[Helix] [FigmaService] parseMultipleFigmaUrls matches count:', matches.length);
+
+    const urls: FigmaUrlParts[] = [];
+    const nodeIds: string[] = [];
+
+    for (const url of matches) {
+      console.log('[Helix] [FigmaService] Processing URL:', url);
+      const parsed = this.parseFigmaUrl(url.trim());
+      console.log('[Helix] [FigmaService] Parsed result:', parsed);
+      urls.push(parsed);
+      if (parsed.nodeId) {
+        // Normalize the node ID
+        const normalized = this.normalizeNodeId(parsed.nodeId);
+        console.log('[Helix] [FigmaService] Normalized nodeId:', normalized);
+        if (normalized) {
+          nodeIds.push(normalized);
+        }
+      }
+    }
+
+    console.log('[Helix] [FigmaService] parseMultipleFigmaUrls result - nodeIds:', nodeIds);
+    return { urls, nodeIds };
   }
 
   /**

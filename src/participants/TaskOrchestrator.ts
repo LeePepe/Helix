@@ -167,25 +167,43 @@ export class TaskOrchestrator {
   }
 
   /**
-   * Extract Figma node ID or URL from prompt
+   * Extract Figma node ID or URL(s) from prompt
    * Returns either:
-   * - Full Figma URL (if found) - MCP tool will extract node ID automatically
+   * - Multiple Figma URLs joined by space (if multiple found)
+   * - Single Figma URL (if found) - MCP tool will extract node ID automatically
    * - Node ID in format "123:456" (if found)
    * - undefined (if neither found)
    */
   private extractNodeId(prompt: string): string | undefined {
     console.log('[Helix] [TaskOrchestrator] ========== extractNodeId START ==========');
     console.log('[Helix] [TaskOrchestrator] Input prompt:', prompt);
+    console.log('[Helix] [TaskOrchestrator] Input prompt length:', prompt.length);
 
-    // First, try to extract full Figma URL - FigmaAnalyzerAgent will handle URL parsing
-    const figmaUrlMatch = prompt.match(/(https?:\/\/(?:www\.)?figma\.com\/(?:design|file)\/[^\s]+)/);
-    if (figmaUrlMatch) {
-      const url = figmaUrlMatch[1];
-      console.log('[Helix] [TaskOrchestrator] ✅ Found complete Figma URL');
-      console.log('[Helix] [TaskOrchestrator] Extracted URL:', url);
-      console.log('[Helix] [TaskOrchestrator] 📌 Passing URL to FigmaAnalyzerAgent (it will extract node-id)');
-      console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
-      return url;
+    // First, try to extract ALL Figma URLs - FigmaAnalyzerAgent will handle URL parsing
+    const figmaUrlPattern = /(https?:\/\/(?:www\.)?figma\.com\/(?:design|file)\/[^\s,]+)/g;
+    const allMatches = prompt.match(figmaUrlPattern);
+
+    console.log('[Helix] [TaskOrchestrator] figmaUrlPattern matches:', allMatches);
+    console.log('[Helix] [TaskOrchestrator] Number of matches:', allMatches?.length || 0);
+
+    if (allMatches && allMatches.length > 0) {
+      if (allMatches.length === 1) {
+        const url = allMatches[0];
+        console.log('[Helix] [TaskOrchestrator] ✅ Found single Figma URL');
+        console.log('[Helix] [TaskOrchestrator] Extracted URL:', url);
+        console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
+        return url;
+      } else {
+        // Multiple URLs found - join them with space so FigmaAnalyzerAgent can parse all
+        const joinedUrls = allMatches.join(' ');
+        console.log('[Helix] [TaskOrchestrator] ✅ Found multiple Figma URLs:', allMatches.length);
+        allMatches.forEach((url, idx) => {
+          console.log(`[Helix] [TaskOrchestrator]   URL ${idx + 1}: ${url}`);
+        });
+        console.log('[Helix] [TaskOrchestrator] Joined URLs:', joinedUrls);
+        console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
+        return joinedUrls;
+      }
     }
 
     // If no URL, try to extract from node-id parameter
@@ -198,11 +216,12 @@ export class TaskOrchestrator {
       return extracted;
     }
 
-    // Check if direct node ID provided
-    const nodeIdMatch = prompt.match(/\b(\d+[-:]\d+)\b/);
-    if (nodeIdMatch) {
-      const extracted = nodeIdMatch[1];
-      console.log('[Helix] [TaskOrchestrator] ✅ Found direct nodeId pattern');
+    // Check if direct node ID provided (could be multiple, separated by space/comma)
+    const nodeIdPattern = /\b(\d+[-:]\d+)\b/g;
+    const nodeIdMatches = prompt.match(nodeIdPattern);
+    if (nodeIdMatches && nodeIdMatches.length > 0) {
+      const extracted = nodeIdMatches.join(' ');
+      console.log('[Helix] [TaskOrchestrator] ✅ Found direct nodeId pattern(s):', nodeIdMatches.length);
       console.log('[Helix] [TaskOrchestrator] Extracted value:', extracted);
       console.log('[Helix] [TaskOrchestrator] ========== extractNodeId END ==========');
       return extracted;

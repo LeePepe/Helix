@@ -23,7 +23,8 @@ import { summarizeContextForPlanner } from '../agents/utils/contextSummarizer';
 export const UnifiedFigmaInputSchema = z.object({
   // Common
   userPrompt: z.string().optional().describe('User\'s natural language description of what they want'),
-  nodeId: z.string().optional().describe('Figma node ID to analyze'),
+  nodeId: z.string().optional().describe('Figma node ID or URL(s) to analyze - supports multiple URLs separated by spaces, commas, or newlines'),
+  nodeIds: z.array(z.string()).optional().describe('Explicit array of Figma node IDs (takes precedence over nodeId if provided)'),
   // Optional list of user-provided chat prompt references to guide generation
   userReferences: z.array(ChatPromptReferenceSchema).optional().describe('List of user-provided references (URLs or notes)'),
 
@@ -51,7 +52,6 @@ export const UnifiedFigmaOutputSchema = z.object({
       codegenResults: z.array(CodegenResultSchema),
     })
   ).optional(),
-  finalScore: z.number().optional(),
   summary: z.string(),
 });
 
@@ -84,6 +84,9 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
   ): Promise<UnifiedFigmaOutput> {
     console.log('[Helix] [UnifiedFigmaTask] 🚀 Task execution started');
     console.log('[Helix] [UnifiedFigmaTask] Input nodeId:', input.nodeId);
+    console.log('[Helix] [UnifiedFigmaTask] Input nodeId type:', typeof input.nodeId);
+    console.log('[Helix] [UnifiedFigmaTask] Input nodeId length:', input.nodeId?.length);
+    console.log('[Helix] [UnifiedFigmaTask] Input nodeIds:', input.nodeIds);
     console.log('[Helix] [UnifiedFigmaTask] Input userPrompt:', input.userPrompt);
     console.log('[Helix] [UnifiedFigmaTask] Input designSystemPath:', input.designSystemPath);
     console.log('[Helix] [UnifiedFigmaTask] Input userReferences:', input.userReferences);
@@ -99,7 +102,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
     // If debug mode is enabled, skip intent analysis and force CodeAnalyzer only.
     let intentAnalysis: any;
-    if (isDebugMode) {
+    if (false) {
       console.warn('[Helix] [DEBUG] Debug mode enabled. Skipping intent analysis and forcing FigmaAnalyzer.');
       stream.markdown('> ⚠️ **DEBUG MODE**: Skipping intent analysis. Only `FigmaAnalyzer` will run.\n\n');
       intentAnalysis = {
@@ -156,7 +159,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
     let summary: string;
     if (compareResult) {
-      summary = `Comparison complete. Score: ${compareResult.score}/100, Found ${compareResult.diffs?.length || 0} differences`;
+      summary = `Comparison complete. Found ${compareResult.diffs?.length || 0} differences`;
     } else if (totalFiles > 0) {
       summary = `Generated ${totalFiles} file changes using ${executedAgents.length} agents`;
     } else {
@@ -173,7 +176,6 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
       intent: intentAnalysis.intent,
       executedAgents,
       codegenResults: codegenResults.length > 0 ? codegenResults : undefined,
-      finalScore: compareResult?.score,
       summary,
     };
   }
@@ -187,7 +189,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     agentResults: AgentResults,
     ctx: ExecutionContext,
     tools: ToolRegistry,
-    artifacts: ArtifactStore,
+    _artifacts: ArtifactStore,
     taskInput: UnifiedFigmaInput,
     stream?: StreamHandler,
     focusAreas?: string
@@ -231,11 +233,12 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     // Execute agent with stream support
     const result = await agent.run(ctx, tools, agentInput, stream);
 
-    // Store result in artifacts
-    await artifacts.set(
-      { runId: ctx.runId, name: `${plan.agentName}-${Date.now()}` },
-      result
-    );
+    // Note: Artifact persistence disabled - results are kept in memory only
+    // If you need to persist results for debugging, uncomment the following:
+    // await artifacts.set(
+    //   { runId: ctx.runId, name: `${plan.agentName}-${Date.now()}` },
+    //   result
+    // );
 
     return result;
   }
@@ -260,6 +263,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     switch (plan.agentName) {
       case 'FigmaAnalyzer':
         input.nodeId = input.nodeId || taskInput.nodeId;
+        input.nodeIds = input.nodeIds || taskInput.nodeIds;
         input.forceCode = input.forceCode || taskInput.forceCode;
         break;
 

@@ -5,6 +5,7 @@
  */
 export function isDebugMode(): boolean {
   try {
+    return false;
     if (process.env.HELIX_DEBUG === '1') {
       console.log('DEBUG MODE: Enabled via HELIX_DEBUG env var');
       return true;

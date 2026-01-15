@@ -254,11 +254,12 @@ export class LLMService {
       console.log('[LLMService] Total available tools:', allTools.length);
 
       // Filter to only essential file operation tools
+      // Note: copilot_createFile is excluded due to "Invalid stream" bug in Copilot Chat extension
       const allowedToolNames = [
         'copilot_readFile',
-        'copilot_applyPatch',
+        'copilot_applyPatch',  // Preferred for creating/editing files
         'copilot_insertEdit',
-        'copilot_createFile',
+        // 'copilot_createFile',  // Disabled: causes "Invalid stream" error
         'copilot_editFiles',
         'copilot_replaceString',
         'copilot_multiReplaceString',
@@ -330,8 +331,16 @@ export class LLMService {
       ctx.throwIfCancelled();
     }
 
+    // Log LLM output
+    console.log('[LLMService] LLM response text:', responseText.substring(0, 500) + (responseText.length > 500 ? '...' : ''));
+    console.log('[LLMService] LLM tool calls count:', toolCalls.length);
+    if (toolCalls.length > 0) {
+      console.log('[LLMService] LLM tool calls:', toolCalls.map(tc => ({ name: tc.name, callId: tc.callId, input: tc.input })));
+    }
+
     // If no tool calls, return the text response
     if (toolCalls.length === 0) {
+      console.log('[LLMService] No tool calls, returning text response');
       return {
         ok: true,
         data: { content: responseText },

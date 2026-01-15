@@ -6,7 +6,7 @@ import { FigmaRefSchema, TraceEventSchema } from './common';
 // ============================================================================
 
 export const DiffSchema = z.object({
-  category: z.enum(['layout', 'typography', 'color', 'spacing', 'behavior', 'states']),
+  category: z.string(),
   description: z.string(),
   severity: z.enum(['low', 'medium', 'high']),
   figmaRefs: z.array(FigmaRefSchema).optional(),
@@ -25,7 +25,6 @@ export type NextAction = z.infer<typeof NextActionSchema>;
 
 export const CompareResultSchema = z.object({
   schemaVersion: z.literal('1.0'),
-  score: z.number().min(0).max(100), // 0-100
   diffs: z.array(DiffSchema),
   nextActions: z.array(NextActionSchema),
   trace: z.array(TraceEventSchema).optional(),

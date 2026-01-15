@@ -99,10 +99,10 @@ export const UIPartSchema: z.ZodType<any> = z.lazy(() =>
     name: z.string(),
     role: z.string(), // human-readable e.g. "DialogHeader", "PrimaryButtonRow"
     figmaRefs: z.array(FigmaRefSchema),
-    rawFigmaData: z.string().optional().describe('Original Figma design context data for this component'),
+    metadata: z.string().optional().describe('XML structure data for this component'),
+    designContext: z.string().optional().describe('Full design context data for this component'),
     layoutNotes: z.string().optional(),
     tokensHint: TokensHintSchema, // Design tokens specific to this component
-    children: z.array(UIPartSchema).optional(),
     variants: z.array(DiscoveredCaseSchema).optional(),
   })
 );
@@ -112,10 +112,10 @@ export type UIPart = {
   name: string;
   role: string;
   figmaRefs: FigmaRef[];
-  rawFigmaData?: string;
+  metadata?: string;
+  designContext?: string;
   layoutNotes?: string;
   tokensHint?: TokensHint;
-  children?: UIPart[];
   variants?: DiscoveredCase[];
 };
 
