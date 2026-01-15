@@ -104,6 +104,7 @@ export const UIPartSchema: z.ZodType<any> = z.lazy(() =>
     layoutNotes: z.string().optional(),
     tokensHint: TokensHintSchema, // Design tokens specific to this component
     variants: z.array(DiscoveredCaseSchema).optional(),
+    children: z.array(z.lazy(() => UIPartSchema)).optional().describe('Child UI parts for composite/variant components'),
   })
 );
 
@@ -117,6 +118,7 @@ export type UIPart = {
   layoutNotes?: string;
   tokensHint?: TokensHint;
   variants?: DiscoveredCase[];
+  children?: UIPart[];
 };
 
 // Reference to an external chat prompt or user-provided guidance

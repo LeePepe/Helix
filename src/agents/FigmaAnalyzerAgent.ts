@@ -564,7 +564,7 @@ Example JSON output exactly matching the schema (no extra prose):
         root.role = structure.rootRole ?? 'Unknown Role';
       }
     } else {
-      // Synthetic root for Composite or Variants - merge all parts as a flat structure
+      // Synthetic root for Composite or Variants - merge all parts as children
       root = {
         id: 'root-synthetic',
         name: structure.rootName ?? 'Unknown Root',
@@ -573,8 +573,8 @@ Example JSON output exactly matching the schema (no extra prose):
         layoutNotes: 'Synthetic root aggregation',
         metadata: metadata,
         designContext: designContext,
-        // Store all part roots as array (not as children)
-        parts: results.map(r => r.root),
+        // Store all part roots as children array
+        children: results.map(r => r.root),
       };
     }
 

@@ -189,7 +189,7 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
     agentResults: AgentResults,
     ctx: ExecutionContext,
     tools: ToolRegistry,
-    _artifacts: ArtifactStore,
+    artifacts: ArtifactStore,
     taskInput: UnifiedFigmaInput,
     stream?: StreamHandler,
     focusAreas?: string
@@ -215,7 +215,6 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
       case 'CodeAnalyzer':
         agent = new CodeAnalyzerAgent(new LLMService());
         break;
-        break;
       default:
         throw new Error(`Agent ${plan.agentName} not found`);
     }
@@ -235,10 +234,10 @@ export class UnifiedFigmaTask extends BaseTask<UnifiedFigmaInput, UnifiedFigmaOu
 
     // Note: Artifact persistence disabled - results are kept in memory only
     // If you need to persist results for debugging, uncomment the following:
-    // await artifacts.set(
-    //   { runId: ctx.runId, name: `${plan.agentName}-${Date.now()}` },
-    //   result
-    // );
+    await artifacts.set(
+      { runId: ctx.runId, name: `${plan.agentName}-${Date.now()}` },
+      result
+    );
 
     return result;
   }

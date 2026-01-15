@@ -116,10 +116,11 @@ export class ComparerAgent extends BaseAgent<ComparerInput, CompareResult> {
   ): ComparisonTask[] {
     const tasks: ComparisonTask[] = [];
 
-    // Extract UI parts
+    // Extract UI parts from children array
     const uiParts: UIPart[] = [];
     if (figmaData.root.children && figmaData.root.children.length > 0) {
       uiParts.push(...figmaData.root.children);
+      console.log(`[Helix] [ComparerAgent] Found ${figmaData.root.children.length} children in root`);
     } else {
       uiParts.push(figmaData.root);
     }
