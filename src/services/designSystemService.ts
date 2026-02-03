@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { PromptService } from './promptService';
 import { ConfigService } from './configService';
-import { ChatService } from './chatService';
+import { LLMService } from './llmService';
 
 /**
  * Service for managing design system detection, creation, and analysis
@@ -12,13 +12,43 @@ export class DesignSystemService {
   private designSystemContent: string | null = null;
   private promptService: PromptService;
   private configService: ConfigService;
-  private chatService: ChatService;
+  private llmService: LLMService;
   private detectedFramework: string | null = null;
 
-  constructor(promptService: PromptService, configService: ConfigService, chatService: ChatService) {
+  constructor(promptService: PromptService, configService: ConfigService) {
     this.promptService = promptService;
     this.configService = configService;
-    this.chatService = chatService;
+    this.llmService = new LLMService();
+  }
+
+  /**
+   * Send LLM request with streaming output to chat
+   */
+  private async sendLLMRequest(
+    messages: vscode.LanguageModelChatMessage[],
+    stream: vscode.ChatResponseStream,
+    token: vscode.CancellationToken
+  ): Promise<string> {
+    const models = await vscode.lm.selectChatModels({
+      vendor: 'copilot',
+      family: this.configService.getModelFamily()
+    });
+
+    if (models.length === 0) {
+      throw new Error('No language model available. Please ensure GitHub Copilot Chat is installed and active.');
+    }
+
+    const response = await models[0].sendRequest(messages, {}, token);
+    let responseText = '';
+
+    for await (const part of response.stream) {
+      if (part instanceof vscode.LanguageModelTextPart) {
+        responseText += part.value;
+        stream.markdown(part.value);
+      }
+    }
+
+    return responseText;
   }
 
   /**
@@ -76,7 +106,11 @@ export class DesignSystemService {
   /**
    * Ensure design system guide exists, initialize if it doesn't
    */
-  async ensureInitialized(stream: vscode.ChatResponseStream, request: vscode.ChatRequest, token: vscode.CancellationToken): Promise<boolean> {
+  async ensureInitialized(
+    stream: vscode.ChatResponseStream,
+    token: vscode.CancellationToken,
+    toolInvocationToken?: vscode.ChatParticipantToolToken
+  ): Promise<boolean> {
     const exists = await this.checkDesignSystemExists();
 
     if (exists) {
@@ -98,23 +132,54 @@ export class DesignSystemService {
     stream.progress('Generating design system guide...');
 
     // Generate design system guide
-    await this.generateDesignSystemGuide(request, stream, token);
+    console.log('[Helix] [DesignSystemService] Starting design system guide generation...');
+    const generatedContent = await this.generateDesignSystemGuide(stream, token, toolInvocationToken);
 
-    stream.markdown(`✅ **Design System Guide Created**\n\n`);
-    stream.markdown(`Saved to: \`${this.designSystemPath}\`\n\n`);
+    console.log('[Helix] [DesignSystemService] Generated content length:', generatedContent.length);
+    console.log('[Helix] [DesignSystemService] Generated content preview:', generatedContent.substring(0, 200));
+
+    // Save the generated content
+    if (generatedContent && generatedContent.trim().length > 0) {
+      stream.progress('Saving design system guide...');
+      console.log('[Helix] [DesignSystemService] Saving design system guide...');
+      await this.saveDesignSystem(generatedContent);
+      stream.markdown(`\n\n✅ **Design System Guide Created**\n\n`);
+      stream.markdown(`Saved to: \`${this.designSystemPath}\`\n\n`);
+    } else {
+      console.error('[Helix] [DesignSystemService] Generated content is empty!');
+      stream.markdown(`\n\n❌ **Failed to generate design system guide** - LLM returned empty content\n\n`);
+    }
+
     return false;
   }
 
   /**
    * Generate a design system guide from codebase analysis
    */
-  private async generateDesignSystemGuide(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<string> {
+  private async generateDesignSystemGuide(
+    stream: vscode.ChatResponseStream,
+    token: vscode.CancellationToken,
+    toolInvocationToken?: vscode.ChatParticipantToolToken
+  ): Promise<string> {
     // Load generation prompt from external file
+    console.log('[Helix] [DesignSystemService] Loading initialization prompt...');
     const promptFileContent = await this.promptService.loadInitializationPrompt('design-system-rules-prompt.md');
+    console.log('[Helix] [DesignSystemService] Prompt loaded, length:', promptFileContent.length);
+    console.log('[Helix] [DesignSystemService] Prompt preview:', promptFileContent.substring(0, 300));
+
+    stream.markdown(`\n📋 **Prompt loaded** (${promptFileContent.length} chars)\n\n`);
 
     const messages = [vscode.LanguageModelChatMessage.User(promptFileContent)];
-    
-    return await this.chatService.sendRequest(messages, { request, stream, token });
+
+    console.log('[Helix] [DesignSystemService] Sending LLM request with tools via LLMService...');
+    stream.markdown(`🤖 **Generating design system guide...**\n\n`);
+
+    return await this.llmService.chatWithToolsStreaming(messages, {
+      stream,
+      token,
+      toolInvocationToken,
+      model: this.configService.getModelFamily()
+    });
   }
 
   /**
@@ -343,14 +408,14 @@ export class DesignSystemService {
    * Analyze design system tokens from detected files
    * Uses the LLM to extract and structure token information
    */
-  async analyzeDesignSystem(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<{
+  async analyzeDesignSystem(stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<{
     colors: Record<string, string>;
     typography: Record<string, any>;
     spacing: Record<string, string>;
     components: string[];
     framework: string;
   }> {
-    const { foundFiles, detectedDomains } = await this.detectDesignSystemFiles();
+    const { foundFiles } = await this.detectDesignSystemFiles();
     const framework = await this.detectFramework();
     
     const result = {
@@ -405,7 +470,7 @@ export class DesignSystemService {
     try {
       // Use the LLM to analyze the files
       const messages = [vscode.LanguageModelChatMessage.User(promptContent)];
-      const analysisResponse = await this.chatService.sendRequest(messages, { request, stream, token });
+      const analysisResponse = await this.sendLLMRequest(messages, stream, token);
       
       // Try to parse the JSON response
       try {

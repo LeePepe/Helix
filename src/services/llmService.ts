@@ -380,18 +380,22 @@ export class LLMService {
     toolInvocationToken?: vscode.ChatParticipantToolToken
   ): Promise<vscode.LanguageModelToolResultPart[]> {
     const results: vscode.LanguageModelToolResultPart[] = [];
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
 
     for (const toolCall of toolCalls) {
       try {
         console.log(`[LLMService] Invoking tool: ${toolCall.name}`);
-        console.log(`[LLMService] Tool input (full):`, JSON.stringify(toolCall.input, null, 2));
+        console.log(`[LLMService] Tool input (original):`, JSON.stringify(toolCall.input, null, 2));
         console.log(`[LLMService] toolInvocationToken present:`, !!toolInvocationToken);
-        console.log(`[LLMService] toolInvocationToken value:`, toolInvocationToken);
+
+        // Fix relative paths in tool input
+        const fixedInput = this.fixToolInputPaths(toolCall.input, workspaceRoot);
+        console.log(`[LLMService] Tool input (fixed):`, JSON.stringify(fixedInput, null, 2));
 
         const result = await vscode.lm.invokeTool(
           toolCall.name,
           {
-            input: toolCall.input,
+            input: fixedInput,
             toolInvocationToken,
           },
           ctx.cancellationToken
@@ -413,5 +417,209 @@ export class LLMService {
     }
 
     return results;
+  }
+
+  /**
+   * Fix relative paths and hallucinated paths in tool input to absolute paths
+   */
+  private fixToolInputPaths(input: object, workspaceRoot: string): object {
+    if (!input || typeof input !== 'object') {
+      return input;
+    }
+
+    const pathKeys = ['path', 'filePath', 'file', 'directory', 'dir', 'uri', 'relativePath', 'fsPath', 'targetPath', 'sourcePath'];
+    const fixed = { ...input } as Record<string, unknown>;
+
+    // Common hallucinated path prefixes that LLMs generate
+    const hallucinatedPrefixes = [
+      '/home/user/repo/',
+      '/home/user/project/',
+      '/home/user/',
+      '/Users/user/project/',
+      '/Users/user/',
+      '/workspace/',
+      '/app/',
+      '/project/',
+      '/repo/',
+    ];
+
+    for (const key of pathKeys) {
+      if (key in fixed && typeof fixed[key] === 'string') {
+        let pathValue = fixed[key] as string;
+
+        // First, check for hallucinated absolute paths and extract the relative part
+        for (const prefix of hallucinatedPrefixes) {
+          if (pathValue.startsWith(prefix)) {
+            const relativePart = pathValue.slice(prefix.length);
+            const newPath = `${workspaceRoot}/${relativePart}`;
+            console.log(`[LLMService] Fixed hallucinated path: ${pathValue} -> ${newPath}`);
+            pathValue = newPath;
+            fixed[key] = pathValue;
+            break;
+          }
+        }
+
+        // Then, check if it's a relative path (starts with ./ or ../ or doesn't start with /)
+        if (pathValue.startsWith('./') || pathValue.startsWith('../') || (pathValue && !pathValue.startsWith('/'))) {
+          // Convert to absolute path
+          const absolutePath = pathValue.startsWith('./')
+            ? `${workspaceRoot}/${pathValue.slice(2)}`
+            : pathValue.startsWith('../')
+              ? `${workspaceRoot}/${pathValue}`
+              : `${workspaceRoot}/${pathValue}`;
+          fixed[key] = absolutePath;
+          console.log(`[LLMService] Fixed relative path: ${pathValue} -> ${absolutePath}`);
+        }
+      }
+    }
+
+    return fixed;
+  }
+
+  /**
+   * Send a request with tool calling support and streaming output to ChatResponseStream
+   * This is a simplified version that doesn't require ExecutionContext
+   */
+  async chatWithToolsStreaming(
+    messages: vscode.LanguageModelChatMessage[],
+    options: {
+      stream: vscode.ChatResponseStream;
+      token: vscode.CancellationToken;
+      toolInvocationToken?: vscode.ChatParticipantToolToken;
+      model?: string;
+    }
+  ): Promise<string> {
+    const { stream, token, toolInvocationToken, model: modelFamily } = options;
+
+    console.log('[LLMService] chatWithToolsStreaming called');
+    console.log('[LLMService] toolInvocationToken present:', !!toolInvocationToken);
+
+    // Get model
+    const models = await vscode.lm.selectChatModels({
+      vendor: 'copilot',
+      family: modelFamily || 'gpt-4o'
+    });
+
+    if (models.length === 0) {
+      throw new Error('No language model available. Please ensure GitHub Copilot Chat is installed and active.');
+    }
+
+    const model = models[0];
+
+    // Get available tools and filter to essential ones (max 128 tools limit)
+    const allTools = Array.from(vscode.lm.tools);
+    console.log('[LLMService] Total available tools:', allTools.length);
+
+    // Filter to essential tools for design system generation
+    const essentialToolPrefixes = [
+      'copilot_',           // Copilot file/code tools
+      'mcp_figma',          // Figma MCP tools
+      'mcp_figma-desktop',  // Figma Desktop MCP tools
+    ];
+
+    // Tools to exclude (known to cause issues)
+    const excludedTools = [
+      'copilot_createFile',  // Disabled: causes "Invalid stream" error in Copilot Chat extension
+    ];
+
+    const filteredTools = allTools.filter(tool =>
+      essentialToolPrefixes.some(prefix => tool.name.startsWith(prefix)) &&
+      !excludedTools.includes(tool.name)
+    ).slice(0, 128); // Ensure we don't exceed 128 tools
+
+    console.log('[LLMService] Filtered tools for streaming:', filteredTools.length, filteredTools.map(t => t.name).join(', '));
+    stream.markdown(`🔧 **Available tools:** ${filteredTools.length}\n\n`);
+
+    // Send request with filtered tools
+    const requestOptions: vscode.LanguageModelChatRequestOptions = {
+      justification: 'Helix needs LLM with tool access for design system generation',
+      tools: filteredTools.length > 0 ? filteredTools : undefined,
+    };
+
+    const response = await model.sendRequest(messages, requestOptions, token);
+    return await this.processToolCallsStreaming(model, messages, response, requestOptions, stream, token, toolInvocationToken);
+  }
+
+  /**
+   * Process LLM response with tool calls, streaming output to ChatResponseStream
+   */
+  private async processToolCallsStreaming(
+    model: vscode.LanguageModelChat,
+    messages: vscode.LanguageModelChatMessage[],
+    response: vscode.LanguageModelChatResponse,
+    requestOptions: vscode.LanguageModelChatRequestOptions,
+    stream: vscode.ChatResponseStream,
+    token: vscode.CancellationToken,
+    toolInvocationToken?: vscode.ChatParticipantToolToken
+  ): Promise<string> {
+    let responseText = '';
+    const toolCalls: vscode.LanguageModelToolCallPart[] = [];
+
+    // Collect text and tool calls from stream
+    for await (const part of response.stream) {
+      if (part instanceof vscode.LanguageModelTextPart) {
+        responseText += part.value;
+        stream.markdown(part.value);
+      } else if (part instanceof vscode.LanguageModelToolCallPart) {
+        toolCalls.push(part);
+      }
+    }
+
+    // If no tool calls, return the text response
+    if (toolCalls.length === 0) {
+      console.log('[LLMService] No tool calls in streaming response, complete');
+      return responseText;
+    }
+
+    // Execute tool calls
+    console.log(`[LLMService] Executing ${toolCalls.length} tool calls (streaming):`, toolCalls.map(tc => tc.name).join(', '));
+    stream.markdown(`\n\n🔧 **Executing tools:** ${toolCalls.map(tc => tc.name).join(', ')}\n\n`);
+
+    // Add assistant message with tool calls
+    const contentParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
+    if (responseText) {
+      contentParts.push(new vscode.LanguageModelTextPart(responseText));
+    }
+    contentParts.push(...toolCalls);
+    messages.push(vscode.LanguageModelChatMessage.Assistant(contentParts));
+
+    // Execute tools and collect results
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+    const toolResults: vscode.LanguageModelToolResultPart[] = [];
+    for (const toolCall of toolCalls) {
+      try {
+        stream.progress(`Using tool: ${toolCall.name}...`);
+        console.log(`[LLMService] Invoking tool (streaming): ${toolCall.name}`);
+
+        // Fix relative paths in tool input
+        const fixedInput = this.fixToolInputPaths(toolCall.input, workspaceRoot);
+        console.log(`[LLMService] Tool input (fixed):`, JSON.stringify(fixedInput));
+
+        const result = await vscode.lm.invokeTool(
+          toolCall.name,
+          { input: fixedInput, toolInvocationToken },
+          token
+        );
+        toolResults.push(new vscode.LanguageModelToolResultPart(toolCall.callId, result.content));
+        console.log(`[LLMService] Tool ${toolCall.name} succeeded (streaming)`);
+      } catch (toolError) {
+        const errorMsg = toolError instanceof Error ? toolError.message : String(toolError);
+        console.error(`[LLMService] Tool ${toolCall.name} failed (streaming):`, errorMsg);
+        stream.markdown(`\n⚠️ Tool ${toolCall.name} failed: ${errorMsg}\n`);
+        toolResults.push(new vscode.LanguageModelToolResultPart(
+          toolCall.callId,
+          [new vscode.LanguageModelTextPart(`Error: ${errorMsg}`)]
+        ));
+      }
+    }
+
+    // Add tool results as user message
+    const userMsg = vscode.LanguageModelChatMessage.User('');
+    userMsg.content = toolResults;
+    messages.push(userMsg);
+
+    // Continue the conversation
+    const followUpResponse = await model.sendRequest(messages, requestOptions, token);
+    return await this.processToolCallsStreaming(model, messages, followUpResponse, requestOptions, stream, token, toolInvocationToken);
   }
 }

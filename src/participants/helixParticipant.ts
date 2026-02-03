@@ -4,7 +4,6 @@ import { DesignSystemService } from '../services/designSystemService';
 import { FigmaService } from '../services/figmaService';
 import { PromptService } from '../services/promptService';
 import { ConfigService } from '../services/configService';
-import { ChatService } from '../services/chatService';
 
 export class HelixParticipant {
   private taskOrchestrator: TaskOrchestrator;
@@ -12,13 +11,11 @@ export class HelixParticipant {
   private figmaService: FigmaService;
   private promptService: PromptService;
   private configService: ConfigService;
-  private chatService: ChatService;
 
   constructor(private context: vscode.ExtensionContext) {
     this.promptService = new PromptService(context.extensionUri);
     this.configService = new ConfigService();
-    this.chatService = new ChatService(this.configService);
-    this.designSystemService = new DesignSystemService(this.promptService, this.configService, this.chatService);
+    this.designSystemService = new DesignSystemService(this.promptService, this.configService);
     this.figmaService = new FigmaService();
 
     // Initialize new task orchestrator
@@ -33,12 +30,21 @@ export class HelixParticipant {
   ): Promise<void> {
     try {
 
-      // Check MCP Status
+      // Check MCP Status (configuration and Figma Desktop connection)
       stream.progress('Validating Figma MCP status...');
-      await this.figmaService.validateMcpStatus(stream);
+      const mcpStatus = await this.figmaService.validateMcpStatus(stream);
+
+      // If MCP is not available, still allow proceeding but commands may fail
+      if (!mcpStatus.available) {
+        // Only block if a command is specified that requires Figma
+        if (request.command === 'fit-finish' || request.command === 'gen-code') {
+          stream.markdown('❌ **Cannot proceed without Figma connection.** Please complete the setup above and try again.\n\n');
+          return;
+        }
+      }
 
       // Ensure design system guide exists
-      let isInitialized = await this.designSystemService.ensureInitialized(stream, request, token);
+      let isInitialized = await this.designSystemService.ensureInitialized(stream, token, request.toolInvocationToken);
 
       // Route based on slash command
       switch (request.command) {

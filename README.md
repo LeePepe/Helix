@@ -137,11 +137,8 @@ Configure the extension in VSCode settings:
 src/
 ├── extension.ts                 # Extension entry point
 ├── participants/
-│   ├── helixParticipant.ts     # Chat participant
-│   └── commandHandlers/
-│       └── taskHandler.ts      # Unified task handler
+│   └── helixParticipant.ts     # Chat participant
 └── services/
-    ├── chatService.ts          # Chat interaction service
     ├── configService.ts        # Configuration management
     ├── designSystemService.ts  # Design system loading
     ├── figmaService.ts         # Figma MCP integration

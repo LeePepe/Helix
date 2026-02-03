@@ -11,10 +11,8 @@ import { LLMService } from '../services/llmService';
 import { DesignSystemService } from '../services/designSystemService';
 import { ConfigService } from '../services/configService';
 import { PromptService } from '../services/promptService';
-import { ChatService } from '../services/chatService';
 import { StreamHandler } from '../runtime/StreamHandler';
 import { isDebugMode } from '../utils/debug';
-import * as path from 'path';
 import * as crypto from 'crypto';
 import { ArtifactStoreFactory } from '../runtime/ArtifactStore';
 import { CacheService } from '../services/cacheService';
@@ -49,16 +47,14 @@ export class DesignSystemAnalyzerAgent extends BaseAgent<
   constructor(private extensionUri?: vscode.Uri) {
     super();
     this.llmService = new LLMService();
-    
+
     // Create service instances
     const configService = new ConfigService();
     const promptService = extensionUri ? new PromptService(extensionUri) : null as any;
-    const chatService = new ChatService(configService);
-    
+
     this.designSystemService = new DesignSystemService(
       promptService,
-      configService,
-      chatService
+      configService
     );
   }
 
