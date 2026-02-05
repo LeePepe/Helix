@@ -477,11 +477,14 @@ export class FigmaService {
    * 1. MCP configuration exists in .vscode/mcp.json
    * 2. Figma Desktop is running with local server enabled
    */
-  async validateMcpStatus(stream: vscode.ChatResponseStream): Promise<{ available: boolean }> {
+  async validateMcpStatus(stream: vscode.ChatResponseStream): Promise<{ available: boolean; needsReload?: boolean }> {
     // Step 1: Check MCP configuration
-    const mcpConfigured = await this.checkAndConfigureMcp(stream);
-    if (!mcpConfigured) {
-      return { available: false };
+    const mcpStatus = await this.checkAndConfigureMcp(stream);
+    if (!mcpStatus.configured) {
+      return { available: false, needsReload: mcpStatus.needsReload };
+    }
+    if (mcpStatus.needsReload) {
+      return { available: false, needsReload: true };
     }
 
     // Step 2: Check if Figma Desktop MCP tools are available
@@ -521,11 +524,11 @@ export class FigmaService {
   /**
    * Check if MCP is configured in .vscode/mcp.json, create/update if needed
    */
-  private async checkAndConfigureMcp(stream: vscode.ChatResponseStream): Promise<boolean> {
+  private async checkAndConfigureMcp(stream: vscode.ChatResponseStream): Promise<{ configured: boolean; needsReload: boolean }> {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       stream.markdown('❌ **No workspace folder found**\n\n');
-      return false;
+      return { configured: false, needsReload: false };
     }
 
     const mcpConfigPath = vscode.Uri.joinPath(workspaceFolder.uri, '.vscode', 'mcp.json');
@@ -537,7 +540,7 @@ export class FigmaService {
 
       // Check if figma-desktop server is already configured
       if (existingConfig?.servers?.['figma-desktop']) {
-        return true; // Already configured
+        return { configured: true, needsReload: false }; // Already configured
       }
 
       // Add figma-desktop to existing config
@@ -566,7 +569,7 @@ export class FigmaService {
       });
 
       stream.markdown('\n\n');
-      return false; // Need reload
+      return { configured: true, needsReload: true }; // Need reload
 
     } catch (error) {
       // File doesn't exist or invalid JSON, create new config
@@ -604,8 +607,7 @@ export class FigmaService {
       });
 
       stream.markdown('\n\n');
-      return false; // Need reload
+      return { configured: true, needsReload: true }; // Need reload
     }
   }
 }
-

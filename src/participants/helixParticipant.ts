@@ -34,6 +34,11 @@ export class HelixParticipant {
       stream.progress('Validating Figma MCP status...');
       const mcpStatus = await this.figmaService.validateMcpStatus(stream);
 
+      // Stop until reload completes if MCP configuration was just created/updated
+      if (mcpStatus.needsReload) {
+        return;
+      }
+
       // If MCP is not available, still allow proceeding but commands may fail
       if (!mcpStatus.available) {
         // Only block if a command is specified that requires Figma
