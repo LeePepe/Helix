@@ -1,0 +1,13 @@
+interface:
+  display_name: "Helix Design Workflows"
+  short_description: "Figma to code, compare, and design system guide"
+  default_prompt: "Use $helix to compare Figma vs code or generate UI code."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "figma-desktop"
+      description: "Figma Desktop MCP server"
+    - type: "mcp"
+      value: "figma"
+      description: "Figma MCP server (URL-based access)"
