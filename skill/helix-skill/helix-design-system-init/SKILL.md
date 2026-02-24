@@ -16,15 +16,15 @@ description: Use when .github/design-system-guide.md is missing, outdated, or ne
 1. Verify MCP availability with `../helix/references/mcp-precheck.md`.
 2. Confirm target guide path (default `.github/design-system-guide.md`).
 
-## Execution Flow
+## Execution
 
-1. Call Figma MCP design system rules tool.
+Use `../helix/references/design-system-rules-prompt.md` as orchestrator.
+
+1. Call `mcp__figma-desktop__create_design_system_rules` to fetch Figma design system rules.
 2. Analyze the codebase for tokens, component patterns, accessibility, and localization.
 3. Synthesize both inputs into a complete design system guide.
 4. Write the guide to `.github/design-system-guide.md` (or user-specified path).
 5. Summarize what was generated and where follow-up review is needed.
-
-Use `../helix/references/design-system-rules-prompt.md` as orchestrator.
 
 ## Reference Inputs
 

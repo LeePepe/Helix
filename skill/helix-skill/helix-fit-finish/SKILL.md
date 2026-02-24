@@ -9,9 +9,9 @@ description: Use when comparing Figma design against implemented code to find mi
 
 Collect required inputs:
 
-- Figma target:
+- Figma target (one or more):
   - Figma Desktop selection (preferred)
-  - Figma URL with node-id
+  - Figma URL(s) with node-id
 - Code file path (required): absolute or repo-relative
 
 If code path is missing, ask for it before proceeding.
@@ -23,31 +23,28 @@ Use `../helix/references/figma-input.md` for Figma input details.
 Before comparison:
 
 1. Verify MCP availability with `../helix/references/mcp-precheck.md`.
-2. Locate design system guide using `../helix/scripts/find-design-system-guide.py`:
-   - Script searches from current directory up to git root
-   - Returns absolute path if found
-   - User can also override with custom path
+2. Locate `.github/design-system-guide.md` by searching from the current directory up to the git root.
+   - User can also override with a custom path.
 3. If guide is missing, run `helix-design-system-init` first.
 4. If guide exists but appears incomplete, ask whether to regenerate.
 
-## Execution Flow
+## Execution
 
-1. Collect Figma context and variables.
-2. Analyze design system guide and extract domain grouping.
-3. Analyze target code implementation and extract UI properties.
-4. Compare by design-system domains (colors, typography, spacing, layout, effects).
-5. Produce a fit-finish report with prioritized issues and fix recommendations.
-6. Ask whether to apply fixes now.
+Follow `../helix/references/fit-finish.md` for the full 4-phase pipeline.
 
-Use `../helix/references/fit-finish.md` as orchestrator.
+Phase dependency order:
 
-## Subagent Split
+- **Phase 1 (parallel)**: Design System Analyzer + Code Analyzer — no dependencies between them
+- **Phase 2**: Figma Collector — depends on Phase 1 Design System Analyzer
+- **Phase 3**: Comparer — depends on ALL of Phase 1 + Phase 2
+- **Phase 4 (optional)**: Code Generator (FIX mode) — only if user wants auto-fix
 
-When subagents are available, split by role:
+## Critical Rules
 
-- Figma Context Collector: `../helix/references/figma-collector.md`
-- Design System Analyzer: `../helix/references/design-system-analyzer.md`
-- Code Analyzer: `../helix/references/code-analyzer.md`
-- Comparator: `../helix/references/comparer.md`
-
-If subagents are unavailable, run phases sequentially with the same boundaries.
+- Phase 1 agents MUST run in parallel.
+- Domains are NEVER hardcoded — always from Design System Analyzer.
+- Figma Collector MUST call real MCP tools, not return placeholders.
+- Comparer MUST wait for all upstream phases.
+- If parallel subflows cannot be created, stop and report the blocker.
+- Final report must be grouped by dynamic domains with prioritized fixes.
+- After report delivery, ask whether to apply fixes now.

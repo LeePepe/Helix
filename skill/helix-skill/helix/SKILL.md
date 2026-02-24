@@ -31,7 +31,15 @@ All delegated flows should confirm:
 
 - Figma context source:
   - Figma Desktop selection (preferred)
-  - Figma URL with node-id
+  - Figma URL(s) with node-id (supports multiple)
 - MCP availability precheck using `../helix/references/mcp-precheck.md`
 
 For input format details, use `../helix/references/figma-input.md`.
+
+## Focus Areas Extraction
+
+Before delegating, extract **focusAreas** from the user prompt if present:
+
+- If user mentions specific design aspects (e.g., "check the typography and colors"), extract as comma-separated string: `"typography, colors"`
+- Pass focusAreas to the delegated skill — it filters the dynamic domain list to reduce work scope.
+- If user doesn't specify, leave focusAreas empty (all domains will be processed).

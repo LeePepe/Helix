@@ -9,14 +9,15 @@ description: Use when generating production-ready code from Figma with project d
 
 Collect required inputs:
 
-- Figma target:
+- Figma target (one or more):
   - Figma Desktop selection (preferred)
-  - Figma URL with node-id
+  - Figma URL(s) with node-id
 
 Collect optional inputs only when needed:
 
 - Output file path
 - Framework/platform hint
+- focusAreas (comma-separated design aspects to prioritize)
 
 Use `../helix/references/figma-input.md` for Figma input details.
 
@@ -29,22 +30,20 @@ Before code generation:
 3. If guide is missing, run `helix-design-system-init` first.
 4. If guide exists but appears incomplete, ask whether to regenerate.
 
-## Execution Flow
+## Execution
 
-1. Collect Figma context and variables.
-2. Analyze design system guide and codebase patterns.
-3. Map generated UI by design-system domains and tokens.
-4. Generate production-ready code aligned with existing conventions.
-5. Return code, suggested file path, and concrete next steps.
+Follow `../helix/references/gen-code.md` for the full 4-phase pipeline.
 
-Use `../helix/references/gen-code.md` as orchestrator.
+Phase dependency order:
 
-## Subagent Split
+- **Phase 1**: Design System Analyzer — must complete before Phase 2
+- **Phase 2**: Figma Collector — depends on Phase 1
+- **Phase 3**: Planner — depends on Phase 1 + Phase 2
+- **Phase 4**: Code Generator (BUILD mode) — depends on Phase 3
 
-When subagents are available, split by role:
+## Critical Rules
 
-- Figma Context Collector: `../helix/references/figma-collector.md`
-- Design System Analyzer: `../helix/references/design-system-analyzer.md`
-- Code Generator: `../helix/references/code-generator.md`
-
-If subagents are unavailable, run phases sequentially with the same boundaries.
+- Domains are NEVER hardcoded — always from Design System Analyzer.
+- Figma Collector MUST call real MCP tools, not return placeholders.
+- Segment work by design system domains and report per-domain decisions.
+- If subagents are unavailable, run phases sequentially with the same boundaries.
