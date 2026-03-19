@@ -32,9 +32,9 @@ All delegated flows should confirm:
 - Figma context source:
   - Figma Desktop selection (preferred)
   - Figma URL(s) with node-id (supports multiple)
-- MCP availability precheck using `../helix/references/mcp-precheck.md`
+- MCP availability precheck using `./references/mcp-precheck.md`
 
-For input format details, use `../helix/references/figma-input.md`.
+For input format details, use `./references/figma-input.md`.
 
 ## Focus Areas Extraction
 
