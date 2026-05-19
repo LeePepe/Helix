@@ -17,13 +17,13 @@ Collect optional inputs when mentioned by the user:
 - **Framework / platform hint**: e.g., `"SwiftUI"`, `"React"`, `"Flutter"`
 - **Focus areas**: comma-separated design aspects to prioritize (e.g., `"colors, typography"`)
 
-For Figma input details, see `../helix/references/figma-input.md`.
+For Figma input details, see `./references/figma-input.md`.
 
 ## Pre-flight Checks
 
 ### 1. MCP Gate
 
-Run `../helix/references/mcp-precheck.md`. Do NOT proceed without a working Figma MCP connection.
+Run `./references/mcp-precheck.md`. Do NOT proceed without a working Figma MCP connection.
 
 ### 2. Design System Guide
 
@@ -121,9 +121,9 @@ Show the user:
 
 If the Agent tool is not available in this environment, run all phases sequentially in the main conversation using the reference docs:
 
-1. `../helix/references/design-system-analyzer.md`
-2. `../helix/references/figma-collector.md`
-3. `../helix/references/gen-code.md` (Phases 3–4)
+1. `./references/design-system-analyzer.md`
+2. `./references/figma-collector.md`
+3. `./references/gen-code.md` (Phases 3–4)
 
 ## Cleanup
 

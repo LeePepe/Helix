@@ -12,13 +12,13 @@ Collect before proceeding:
 - **Figma target** (required): Figma Desktop selection, or one/more Figma URLs with `node-id`
 - **Code file path(s)** (required): absolute or repo-relative path(s) to the code to compare
 
-If code path is missing, ask for it. For Figma input details, see `../helix/references/figma-input.md`.
+If code path is missing, ask for it. For Figma input details, see `./references/figma-input.md`.
 
 ## Pre-flight Checks
 
 ### 1. MCP Gate
 
-Run `../helix/references/mcp-precheck.md`. Do NOT proceed without a working Figma MCP connection.
+Run `./references/mcp-precheck.md`. Do NOT proceed without a working Figma MCP connection.
 
 ### 2. Design System Guide
 
@@ -130,9 +130,9 @@ Display which files were modified.
 
 If the Agent tool is not available in this environment, run all phases sequentially in the main conversation using the reference docs:
 
-1. `../helix/references/design-system-analyzer.md` + `../helix/references/code-analyzer.md`
-2. `../helix/references/figma-collector.md`
-3. `../helix/references/fit-finish.md` (Phase 3 Comparer)
+1. `./references/design-system-analyzer.md` + `./references/code-analyzer.md`
+2. `./references/figma-collector.md`
+3. `./references/fit-finish.md` (Phase 3 Comparer)
 
 ## Cleanup
 

@@ -87,17 +87,17 @@ Create the file with the chosen config. If `.vscode/mcp.json` already exists wit
 
 ## Phase 1 — Execution
 
-Use `../helix/references/design-system-rules-prompt.md` as orchestrator.
+Use `./references/design-system-rules-prompt.md` as orchestrator.
 
 ### 1.1 Fetch Figma design system rules
 
-Load `../helix/references/design-system-figma-rules.md` for details.
+Load `./references/design-system-figma-rules.md` for details.
 
 Call `mcp_figma-desktop_create_design_system_rules` (or `mcp_figma_create_design_system_rules`) to fetch Figma design system rules. Capture the output.
 
 ### 1.2 Analyze the codebase
 
-Load `../helix/references/design-system-codebase-analysis.md` for details.
+Load `./references/design-system-codebase-analysis.md` for details.
 
 Scan the codebase for:
 - Design tokens (colors, typography, spacing, sizing)
@@ -122,7 +122,7 @@ Report what was generated and flag sections that need human review.
 
 ## Reference Inputs
 
-- Figma rules: `../helix/references/design-system-figma-rules.md`
-- Codebase analysis: `../helix/references/design-system-codebase-analysis.md`
-- Orchestrator: `../helix/references/design-system-rules-prompt.md`
-- MCP precheck: `../helix/references/mcp-precheck.md`
+- Figma rules: `./references/design-system-figma-rules.md`
+- Codebase analysis: `./references/design-system-codebase-analysis.md`
+- Orchestrator: `./references/design-system-rules-prompt.md`
+- MCP precheck: `./references/mcp-precheck.md`
