@@ -16,7 +16,7 @@ Read these values from the task prompt:
 - `session_dir` — path to the session scratch directory
 - `output_path` — optional suggested output file path for the generated code
 - `framework_hint` — optional framework override (e.g., `"SwiftUI"`, `"React"`)
-- `focus_areas` — optional comma-separated domain filter
+- `focus_areas` — optional; the `domains` you receive are already scoped to it, so use it only for prioritization, not re-filtering
 
 Read phase data from files:
 - Design system: `{session_dir}/phase1-design-system.json`

@@ -13,75 +13,9 @@ description: Use when .github/design-system-guide.md is missing, outdated, or ne
 
 ## Phase 0 — MCP Gate (BLOCKING)
 
-MCP is **required**. Do NOT proceed to execution without a working Figma MCP connection. Follow these steps in exact order:
+MCP is **required**. Do NOT proceed to execution without a working Figma MCP connection.
 
-### 0.1 Check `.vscode/mcp.json`
-
-Read `.vscode/mcp.json` in the project root.
-
-- **File exists** → go to 0.2.
-- **File missing** → go to 0.3 (create it).
-
-### 0.2 Verify Figma MCP tools are loaded
-
-Search for available tools matching `mcp.*figma`. Two possible prefixes:
-- `mcp_figma-desktop_*` (Desktop local server)
-- `mcp_figma_*` (Remote MCP)
-
-- **Tools found** → MCP gate passes. Skip to **Phase 1**.
-- **Tools NOT found** → the config file exists but the server is unreachable. Go to 0.4.
-
-### 0.3 Create `.vscode/mcp.json`
-
-Ask the user which mode they prefer (default: Desktop):
-
-**Option A — Figma Desktop (recommended, selection-based):**
-
-```json
-{
-  "servers": {
-    "figma-desktop": {
-      "type": "http",
-      "url": "http://127.0.0.1:3845/mcp"
-    }
-  }
-}
-```
-
-**Option B — Remote MCP (URL-based, no Desktop app needed):**
-
-```json
-{
-  "servers": {
-    "figma": {
-      "type": "http",
-      "url": "https://mcp.figma.com/mcp"
-    }
-  }
-}
-```
-
-Create the file with the chosen config. If `.vscode/mcp.json` already exists with other servers, **merge** the Figma server entry into the existing `"servers"` object — do not overwrite.
-
-### 0.4 Ensure the Figma server is running
-
-**For Desktop MCP:**
-1. Tell the user: _"Open Figma Desktop → Menu → Preferences → enable Allow MCP connections."_
-2. Optionally verify reachability: `curl -s http://127.0.0.1:3845/mcp` (a non-error response means it is up).
-
-**For Remote MCP:**
-- No local app needed. The URL `https://mcp.figma.com/mcp` should be reachable. Verify with `curl -sI https://mcp.figma.com/mcp`.
-
-### 0.5 Reload and re-verify
-
-1. Tell the user: _"Please reload VS Code / Claude Code so the new MCP config is picked up."_
-2. **STOP here. Wait for the user to confirm they have reloaded.**
-3. After user confirms, re-run step 0.2 to verify tools are now available.
-4. If tools are still not found, troubleshoot:
-   - Re-check `.vscode/mcp.json` syntax.
-   - Re-check that Figma Desktop is running with MCP enabled.
-   - Ask user to share any error messages.
-5. **Do NOT proceed until MCP tools are confirmed available.**
+Run `../helix/references/mcp-precheck.md` (config lives in `.mcp.json`, legacy `.vscode/mcp.json` accepted). Wait for the user to reload and confirm before continuing. Do NOT proceed until `mcp.*figma` tools are confirmed available.
 
 > **No fallback mode.** Figma rules are essential for a useful design-system guide. Codebase-only analysis without Figma produces an incomplete guide that will need to be regenerated anyway. It is better to fix MCP now.
 

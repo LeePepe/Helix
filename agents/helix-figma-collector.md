@@ -84,9 +84,7 @@ Write to `{session_dir}/phase2-figma.json`:
       }
     ]
   },
-  "metadata": "<combined metadata from all nodes>",
-  "designContext": "<combined design context from all nodes>",
-  "variableDefs": "<combined variable definitions>",
+  "variableDefs": "<token/variable definitions only (small) — not the full design-context blob>",
   "nodeIds": ["<node-id-1>", "<node-id-2>"],
   "errors": []
 }
@@ -94,8 +92,10 @@ Write to `{session_dir}/phase2-figma.json`:
 
 ## Rules
 
+- The structured `root.children[]` (UIParts with per-domain `properties`) is the contract. Downstream agents consume that — they do NOT need the raw blobs.
 - MUST call real MCP tools — do NOT return placeholder or mock data.
+- Do NOT inline the full `get_metadata` / `get_design_context` outputs. Fold their relevant values into each UIPart's `properties` instead. Keep only `variableDefs` (tokens are compact and reused). This keeps `phase2-figma.json` small.
 - If Figma MCP tools are not available (not found in tool list), stop immediately with error: `{ "error": "Figma MCP tools not available. Run MCP precheck first." }`.
 - UIPart decomposition MUST be driven by LLM analysis of actual Figma structure — do not assume a flat 1:1 node-to-part mapping.
-- Screenshot is optional — skip silently if MCP returns an error for that call.
+- Screenshot is optional — save each to `{session_dir}/screenshots/{sourceNodeId}.png` and record the path on the UIPart as `screenshotPath`. Skip silently if MCP returns an error for that call.
 - Write output file before returning.

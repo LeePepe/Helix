@@ -35,9 +35,8 @@ Reference: `src/tasks/commandPresets.ts` (BUILD_FROM_FIGMA_PIPELINE), `src/tasks
      - Each sub-component becomes an independent UIPart
   4. **Detailed analysis per part** (LLM): deep extraction of properties per UIPart
 - Output contract:
-  - `root` with `children[]` — array of UIParts
-  - `metadata` — combined metadata
-  - `designContext` — combined design context
+  - `root` with `children[]` — array of UIParts with per-part `properties`
+  - `variableDefs` — token definitions only; raw metadata/design-context blobs are NOT inlined
 
 ## Phase 3: Planner
 

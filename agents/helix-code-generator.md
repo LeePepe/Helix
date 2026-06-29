@@ -78,7 +78,7 @@ Return the file path and a brief token mapping summary as your response text.
 
 Read `phase3-compare.json`. Extract `diffs[]` filtered to severity `high` and `medium` (fix these). Note severity `low` diffs for the summary but do not auto-fix.
 
-Read `phase1-code-context.json`. Extract `implementationContext.files` to get the current source code for each file.
+Read `phase1-code-context.json` for `implementationContext.filePaths` and `extractedProperties`. Read each file's current source from disk on demand — diffs carry line numbers, so re-read only the files you will modify.
 
 Read `phase1-design-system.json` for token names to use in fixes.
 
