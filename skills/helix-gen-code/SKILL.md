@@ -117,6 +117,18 @@ Show the user:
 - A brief token mapping summary
 - Any `// TODO: add design token` items that need manual review
 
+## Ultracode Mode (preferred when available)
+
+If the **Workflow** tool is available, prefer it over the manual phases above — it runs the same `helix-*` agents as a deterministic pipeline and adds a judge panel before writing code. Trigger when the user says "ultracode", asks for production-grade/thorough output, or the component is complex. Reuse the same `session_dir`.
+
+Call `Workflow` with `args: {session_dir, outputPath, frameworkHint, focusAreas}`:
+
+- **Phase 1–2:** `helix-design-system-analyzer` → `helix-figma-collector` (sequential).
+- **Phase 3 — judge panel:** generate N=3 independent plans via `helix-planner` from different angles (composition-first, token-fidelity-first, a11y-first), score with parallel judges, synthesize the winner grafting best ideas. Pick the strongest plan.
+- **Phase 4:** `helix-code-generator` BUILD mode on the winning plan, then one verify agent: "does the code only use tokens from the guide, no invented names?" Regenerate flagged sections once.
+
+Show file path, token-mapping summary, and `// TODO: add design token` items. A ready-to-run script is in `../helix/references/ultracode-workflows.md`. If Workflow is unavailable, use the manual phases above.
+
 ## Fallback (Agent tool unavailable)
 
 If the Agent tool is not available in this environment, run all phases sequentially in the main conversation using the reference docs:

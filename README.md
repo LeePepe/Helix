@@ -56,6 +56,8 @@ $helix-gen-code                    # generate code from Figma
 $helix  <your request>             # router — picks the right sub-skill
 ```
 
+**Ultracode mode**: say "ultracode" (or ask for a thorough pass) and fit-finish/gen-code run a Workflow-driven pipeline — per-UIPart fan-out with 3-lens adversarial diff verification, or a 3-plan judge panel before BUILD. Falls back to manual phases if Workflow is unavailable.
+
 Each skill asks for a **Figma target** (Desktop selection or URL with `node-id`) and, where relevant, a file path. Append a focus hint to narrow scope: `$helix-fit-finish check only typography and spacing`.
 
 ## Project Structure
