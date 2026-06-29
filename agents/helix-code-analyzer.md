@@ -46,9 +46,7 @@ Read these values from the task prompt:
 ```json
 {
   "implementationContext": {
-    "files": {
-      "<file-path>": "<full source code of the file>"
-    }
+    "filePaths": ["<file-path>"]
   },
   "extractedProperties": {
     "<file-path>": {
@@ -57,7 +55,10 @@ Read these values from the task prompt:
       "spacing": { "padding": "spacing.4", "gap": "8px" },
       "layout": { "display": "flex", "alignItems": "center" },
       "tokenUsage": ["colors.primary", "spacing.md"],
-      "hardcodedValues": ["#1F2937", "8px"]
+      "hardcodedValues": [
+        { "value": "#1F2937", "line": 42 },
+        { "value": "8px", "line": 57 }
+      ]
     }
   },
   "missingFiles": []
@@ -66,6 +67,7 @@ Read these values from the task prompt:
 
 ## Rules
 
-- Include the full source code of each file in `implementationContext.files` — the Comparer needs the raw source for detailed analysis.
+- Do NOT inline full source code. Record paths in `filePaths` only — the Comparer and Code Generator re-read files on demand from disk. This keeps the artifact small.
+- Tag each hardcoded value with its line number so the Comparer can cite locations and the Code Generator can fix without rescanning.
 - Do NOT perform any comparison logic — just extract and structure what is in the code.
-- If all files are missing, write the output with empty `files` and a populated `missingFiles` list, then return an error summary.
+- If all files are missing, write the output with empty `filePaths` and a populated `missingFiles` list, then return an error summary.

@@ -14,9 +14,10 @@ You are the Comparer for the Helix skill pack. You systematically compare every 
 Read these values from the task prompt:
 
 - `session_dir` — path to the session scratch directory
-- `focus_areas` — optional comma-separated domain filter (e.g., `"typography, colors"`)
 - `report_dir` — directory to write the markdown report (default: `.github/helix/reports/`)
 - `component_name` — name for the report file
+
+> `focusAreas` filtering happens upstream in the Design System Analyzer; the `domains` list you receive is already scoped.
 
 Read all phase data from files:
 - Design system: `{session_dir}/phase1-design-system.json`
@@ -29,12 +30,12 @@ Read all phase data from files:
 
 Read the three JSON files. Extract:
 - `uiParts[]` from `phase2-figma.json` → `root.children`
-- `domains[]` from `phase1-design-system.json` → `domains`
-- `codeFiles` from `phase1-code-context.json` → `implementationContext.files`
+- `domains[]` from `phase1-design-system.json` → `domains` (already filtered by `focusAreas` upstream)
+- `extractedProperties` + `implementationContext.filePaths` from `phase1-code-context.json`
 
-### Step 2: Apply focusAreas filter
+### Step 2: Confirm domain scope
 
-If `focus_areas` is non-empty, filter `domains` to only those whose name matches any term in `focus_areas`. If no domains match, use all domains and add a warning to the output.
+`domains` is already filtered by the Design System Analyzer using `focusAreas`. Do NOT re-filter. If `domains` is empty, fall back to all domains and add a warning to the output.
 
 ### Step 3: Build the task matrix
 
@@ -52,7 +53,7 @@ For each domain (outer loop), compare ALL uiParts for that domain in a single LL
 For each `(domain, uiParts[])` group:
 
 1. Gather Figma values: `uiPart.properties[domain.name]` for all parts
-2. Gather code values: extracted properties from code files relevant to this domain
+2. Gather code values: from `extractedProperties` for the relevant files. If a mismatch needs source context (exact line, surrounding code), read that file from `filePaths` on demand — do not load all files up front.
 3. For each UIPart, perform the comparison:
    - Is each Figma property value matched in the code?
    - If mismatched: what is the Figma value, what is the code value?
@@ -127,6 +128,6 @@ Write `{session_dir}/phase3-compare.json` with the structured result from Step 5
 
 - MUST read domains from phase1-design-system.json — never hardcode domain names.
 - Do NOT skip any UIPart × Domain cell unless filtered by focusAreas.
-- Severity classification must be consistent: `high` = perceptible in screenshots, `medium` = noticeable on close inspection, `low` = token naming only.
+- Severity classification must be consistent: `high` = perceptible difference, `medium` = noticeable on close inspection, `low` = token naming only. When a UIPart has a `screenshotPath`, read that image to judge whether a diff is actually visible before assigning `high`.
 - Report must be saved to disk before returning.
 - Return a brief summary as response text: match rate, high-severity count, and the report file path.

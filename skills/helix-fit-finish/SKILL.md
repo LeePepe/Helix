@@ -103,7 +103,6 @@ Launch Agent tool — `subagent_type: "helix-comparer"`:
 ```
 You are the helix-comparer agent.
 session_dir: {session_dir}
-focus_areas: {focusAreas}
 report_dir: .github/helix/reports
 component_name: {componentName}
 ```
