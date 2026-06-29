@@ -1,0 +1,12 @@
+{
+  "name": "helix",
+  "description": "Design-to-code workflows: fit-finish, gen-code, and design-system-init skills with parallel subagents.",
+  "version": "1.0.0",
+  "author": {
+    "name": "LeePepe",
+    "url": "https://github.com/LeePepe/Helix"
+  },
+  "homepage": "https://github.com/LeePepe/Helix",
+  "license": "MIT",
+  "keywords": ["figma", "design-to-code", "design-system", "ui"]
+}

@@ -1,191 +1,81 @@
-# Helix: Design-to-Code Workflows
+# Helix: Design-to-Code Skills for Claude Code
 
-AI-powered workflows for comparing Figma designs against code and generating production-ready UI components. Available as a **VSCode extension** and a **Claude Code skill pack**.
+AI-powered Claude Code skills for comparing Figma designs against your code and generating production-ready UI components — all from your terminal.
 
-## What It Does
+## Skills
 
-| Command | Description |
-|---|---|
-| `/fit-finish` | Compare a Figma node against your code — find color, typography, spacing, and layout mismatches, get a prioritized report with fix suggestions |
-| `/gen-code` | Generate production-ready code from a Figma node using your project's design system tokens and conventions |
+| Skill | Command | Description |
+|---|---|---|
+| `helix` | `$helix` | Router — auto-detects intent and dispatches to the right sub-skill |
+| `helix-fit-finish` | `$helix-fit-finish` | Compare a Figma node against code — color/typography/spacing/layout mismatches with prioritized fixes |
+| `helix-gen-code` | `$helix-gen-code` | Generate production-ready code from a Figma node using your design system tokens |
+| `helix-design-system-init` | `$helix-design-system-init` | Generate `.github/design-system-guide.md` from Figma + codebase analysis |
 
-Both workflows require a **Figma MCP connection** and a **design system guide** (`.github/design-system-guide.md`). If the guide is missing, run the design system init workflow first.
+The fit-finish and gen-code workflows use a **parallel subagent architecture**: Phase 1 launches independent agents (design-system analysis + code analysis) simultaneously to cut runtime.
 
----
+## Prerequisites
 
-## Option A: VSCode Extension
+1. **Claude Code** — [install guide](https://claude.ai/code)
+2. **Figma MCP server** — one of:
+   - **Figma Desktop** (recommended): Figma → Preferences → enable "Allow MCP connections". Local server at `http://127.0.0.1:3845/mcp`.
+   - **Figma Remote MCP**: no desktop app; uses `https://mcp.figma.com/mcp`.
 
-Use Helix directly inside VSCode Chat with the `@helix` participant.
+   Add it to `.vscode/mcp.json` (or `.mcp.json`) in your project — the skills walk you through this if missing:
+   ```json
+   { "servers": { "figma-desktop": { "type": "http", "url": "http://127.0.0.1:3845/mcp" } } }
+   ```
+3. **Design system guide** — `.github/design-system-guide.md`. Required by fit-finish and gen-code. If missing, run `$helix-design-system-init` first.
 
-### Quick Start
+## Installation
 
-1. Select a frame in **Figma Desktop** (or copy a Figma URL with `node-id`)
-2. Open VSCode Chat and type `@helix`
-3. Run a command:
-
-```
-@helix /fit-finish src/components/Button.tsx
-@helix /gen-code https://figma.com/file/ABC?node-id=123:456
-```
-
-### Installation
-
-**From source:**
+### Option A: Plugin (recommended)
 
 ```bash
-git clone https://github.com/your-org/helix
-cd helix
-npm install
-npm run esbuild
-# Press F5 in VSCode to launch Extension Development Host
+claude plugin marketplace add LeePepe/Helix
+claude plugin install helix@helix
 ```
 
-**Package as .vsix:**
+Skills (`$helix`, `$helix-fit-finish`, …) and the six subagents are bundled and enabled automatically. To install from a local clone instead: `claude plugin marketplace add ./`.
+
+### Option B: Manual copy
+
+Skills depend on `helix/references/`, so all four must be installed as siblings.
 
 ```bash
-npm run package
+# user-level (all repos) — drop the ~ for project-level (.claude/skills in this repo only)
+cp -r skills/helix skills/helix-fit-finish skills/helix-gen-code skills/helix-design-system-init ~/.claude/skills/
+cp agents/helix-*.md ~/.claude/agents/
 ```
 
-### Prerequisites
-
-- **Figma MCP Server** — configure in `.vscode/mcp.json`:
-
-  ```json
-  {
-    "servers": {
-      "figma-desktop": {
-        "type": "http",
-        "url": "http://127.0.0.1:3845/mcp"
-      }
-    }
-  }
-  ```
-
-  Then open Figma Desktop → Preferences → enable "Allow MCP connections".
-
-- **AI Provider** — GitHub Copilot or a compatible language model
-
-- **Design System Guide** — `.github/design-system-guide.md` (see [design system init](#design-system-guide))
-
-### Configuration
-
-```json
-{
-  "helix.designSystemPath": ".github/design-system-guide.md",
-  "helix.reportsPath": ".github/helix/reports",
-  "helix.modelFamily": "claude-sonnet-4.5",
-  "helix.enableRemoteFigma": false
-}
-```
-
-### Commands
+## Usage
 
 ```bash
-npm run esbuild          # Build
-npm run esbuild-watch    # Build and watch
-npm run lint             # ESLint
-npm run test             # Run tests (vitest)
-npm run test:coverage    # Tests with coverage report
-npm run package          # Create .vsix
+$helix-design-system-init          # first-time setup: generate the design system guide
+$helix-fit-finish                  # compare Figma vs code, get a fix report
+$helix-gen-code                    # generate code from Figma
+$helix  <your request>             # router — picks the right sub-skill
 ```
 
----
-
-## Option B: Claude Code Skill Pack
-
-Use the same workflows from your terminal via Claude Code — no VSCode required.
-
-```bash
-$helix           # Router: auto-detect intent and dispatch
-$helix-fit-finish
-$helix-gen-code
-$helix-design-system-init
-```
-
-The skill pack uses a **parallel subagent architecture**: fit-finish Phase 1 launches two independent agents simultaneously (design system analysis + code analysis), reducing total runtime.
-
-### Installation
-
-```bash
-# 1. Copy skills
-cp -r skill/helix-skill/helix                    ~/.claude/skills/
-cp -r skill/helix-skill/helix-fit-finish         ~/.claude/skills/
-cp -r skill/helix-skill/helix-gen-code           ~/.claude/skills/
-cp -r skill/helix-skill/helix-design-system-init ~/.claude/skills/
-
-# 2. Copy subagents
-cp skill/helix-skill/helix/agents/*.md ~/.claude/agents/
-```
-
-See [skill/helix-skill/README.md](skill/helix-skill/README.md) for full usage details and troubleshooting.
-
----
-
-## Design System Guide
-
-Both the VSCode extension and the skill pack require `.github/design-system-guide.md`. Generate it with:
-
-- **VSCode**: `@helix` then ask to initialize the design system guide
-- **Claude Code**: `$helix-design-system-init`
-
-This fetches design system rules from Figma and scans your codebase to produce a token mapping reference that all downstream workflows use.
-
----
+Each skill asks for a **Figma target** (Desktop selection or URL with `node-id`) and, where relevant, a file path. Append a focus hint to narrow scope: `$helix-fit-finish check only typography and spacing`.
 
 ## Project Structure
 
 ```
-helix/
-├── src/                             # VSCode extension source
-│   ├── extension.ts                 # Activation entry point
-│   ├── participants/                # VSCode chat participant
-│   │   ├── helixParticipant.ts     # Command routing
-│   │   └── TaskOrchestrator.ts     # Pipeline orchestration
-│   ├── agents/                      # Domain intelligence
-│   │   ├── base/                   # BaseAgent<I,O> class
-│   │   ├── prompts/                # Agent system prompts (markdown)
-│   │   ├── FigmaAnalyzerAgent.ts
-│   │   ├── DesignSystemAnalyzerAgent.ts
-│   │   ├── CodeAnalyzerAgent.ts
-│   │   ├── ComparerAgent.ts
-│   │   ├── PlannerAgent.ts
-│   │   └── CodeGeneratorAgent.ts
-│   ├── tasks/                       # Pipeline orchestration
-│   │   ├── UnifiedFigmaTask.ts
-│   │   └── commandPresets.ts       # fit-finish and gen-code pipelines
-│   ├── contracts/                   # Zod schemas + TypeScript types
-│   ├── runtime/                     # ExecutionContext, ArtifactStore, ToolRegistry
-│   └── services/                    # LLM, Figma MCP, file I/O, cache
-│
-├── skill/helix-skill/               # Claude Code skill pack
-│   ├── README.md                    # Skill pack usage guide
-│   ├── ARCHITECTURE.md             # Pipeline and data flow docs
-│   ├── helix/                       # Router skill + shared resources
-│   │   ├── SKILL.md
-│   │   ├── agents/                 # Subagent definitions (~/.claude/agents/)
-│   │   └── references/             # Detailed spec docs for each phase
-│   ├── helix-fit-finish/SKILL.md   # Parallel orchestrator
-│   ├── helix-gen-code/SKILL.md     # Sequential orchestrator
-│   └── helix-design-system-init/SKILL.md
-│
-└── .github/
-    └── design-system-guide.md      # Generated token reference (gitignored by default)
+.claude-plugin/marketplace.json    # marketplace + plugin manifest
+.claude-plugin/plugin.json         # plugin metadata
+skills/
+├── helix/                         # router + shared references/
+├── helix-fit-finish/              # parallel orchestrator
+├── helix-gen-code/                # sequential orchestrator
+└── helix-design-system-init/      # design system guide generator
+agents/                            # six subagents launched by the orchestrators
 ```
-
----
 
 ## Troubleshooting
 
-**"Figma MCP tools not found"**
-Open Figma Desktop → Preferences → enable "Allow MCP connections". Then reload VSCode / Claude Code to pick up the `.vscode/mcp.json` config.
-
-**"Design system guide not found"**
-Run the design system init workflow first. The guide is required by both fit-finish and gen-code.
-
-**"No language model available" (VSCode)**
-Install GitHub Copilot or a compatible AI provider and ensure it is authenticated.
-
----
+- **Figma MCP not found**: ensure Figma Desktop has MCP enabled or `mcp.json` URL is correct. `$helix-design-system-init` includes setup help.
+- **Design system guide missing**: run `$helix-design-system-init` first.
+- **URL without node-id**: Figma URLs must include `?node-id=...`. Right-click a frame → "Copy link to selection".
 
 ## License
 
