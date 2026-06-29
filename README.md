@@ -20,9 +20,9 @@ The fit-finish and gen-code workflows use a **parallel subagent architecture**: 
    - **Figma Desktop** (recommended): Figma → Preferences → enable "Allow MCP connections". Local server at `http://127.0.0.1:3845/mcp`.
    - **Figma Remote MCP**: no desktop app; uses `https://mcp.figma.com/mcp`.
 
-   Add it to `.vscode/mcp.json` (or `.mcp.json`) in your project — the skills walk you through this if missing:
+   Add it to `.mcp.json` in your project root (legacy `.vscode/mcp.json` also works) — the skills walk you through this if missing:
    ```json
-   { "servers": { "figma-desktop": { "type": "http", "url": "http://127.0.0.1:3845/mcp" } } }
+   { "mcpServers": { "figma-desktop": { "type": "http", "url": "http://127.0.0.1:3845/mcp" } } }
    ```
 3. **Design system guide** — `.github/design-system-guide.md`. Required by fit-finish and gen-code. If missing, run `$helix-design-system-init` first.
 

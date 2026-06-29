@@ -50,9 +50,8 @@ Two independent agents run in parallel:
      - Each sub-component becomes an independent UIPart
   4. **Detailed analysis per part** (LLM): deep extraction of properties per UIPart
 - Output contract:
-  - `root` with `children[]` — array of UIParts (the row axis for comparison)
-  - `metadata` — combined metadata from all nodes
-  - `designContext` — combined design context
+  - `root` with `children[]` — array of UIParts (the row axis for comparison), with per-part `properties` and `screenshotPath`
+  - `variableDefs` — token definitions only; raw metadata/design-context blobs are NOT inlined
 
 **Important**: The Figma Collector does TWO levels of decomposition:
 
@@ -67,15 +66,13 @@ Both levels produce UIParts that feed into the Comparer's task matrix.
 - Dependencies: **ALL of Phase 1 + Phase 2** must complete first
 - Inputs:
   - `figmaData` — from Figma Collector (UIParts)
-  - `designSystem` — from Design System Analyzer (dynamic domains)
-  - `codeFiles` — from Code Analyzer (implementation)
-  - `focusAreas` — optional filter
+  - `designSystem` — from Design System Analyzer (dynamic domains, already focusAreas-scoped)
+  - `codeFiles` — file paths from Code Analyzer (re-read on demand)
 - Actions:
   1. Build UIPart × Domain task matrix
-  2. Apply focusAreas filter to reduce domains
-  3. Execute all tasks in parallel (each task = 1 LLM call)
-  4. Merge results, group by domain
-  5. Generate report with severity breakdown
+  2. Execute all tasks in parallel (each task = 1 LLM call)
+  3. Merge results, group by domain
+  4. Generate report with severity breakdown
 - Output contract:
   - `diffs[]` — per-domain mismatch list with severity
   - `summary` — overall comparison summary
