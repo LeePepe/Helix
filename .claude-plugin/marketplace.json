@@ -1,0 +1,15 @@
+{
+  "name": "helix",
+  "owner": {
+    "name": "LeePepe",
+    "url": "https://github.com/LeePepe/Helix"
+  },
+  "plugins": [
+    {
+      "name": "helix",
+      "source": "./",
+      "description": "Design-to-code workflows for Claude Code: compare Figma designs against code (fit-finish), generate production-ready UI from Figma (gen-code), and initialize a design-system guide.",
+      "version": "1.0.0"
+    }
+  ]
+}
