@@ -125,6 +125,19 @@ session_dir: {session_dir}
 
 Display which files were modified.
 
+## Ultracode Mode (preferred when available)
+
+If the **Workflow** tool is available, prefer it over the manual phase-by-phase Agent calls above — it pipelines the same `helix-*` agents deterministically and adds adversarial verification. Trigger it when the user says "ultracode", asks for a thorough/exhaustive review, or the comparison is high-stakes. Reuse the same `session_dir` and artifacts.
+
+Call `Workflow` with `args: {session_dir, domains, focusAreas}` and this script shape:
+
+- **Phase 1 (parallel barrier):** `helix-design-system-analyzer` + `helix-code-analyzer` in one `parallel()`.
+- **Phase 2:** `helix-figma-collector` (reads `domains` from phase1).
+- **Phase 3 — fan-out + verify:** `pipeline(uiParts, …)`: one `helix-comparer` pass per UIPart, then `parallel()` of 3 diverse lenses (`visible-in-screenshot`, `token-exists`, `severity-justified`) that adversarially re-judge each diff; keep a diff only if ≥2 lenses confirm. This is the core ultracode win.
+- **Phase 4:** if confirmed high/med diffs remain, `helix-code-generator` in FIX mode.
+
+Synthesize the surviving diffs into the report. A ready-to-run script is in `../helix/references/ultracode-workflows.md`. If Workflow is unavailable, use the manual phases above.
+
 ## Fallback (Agent tool unavailable)
 
 If the Agent tool is not available in this environment, run all phases sequentially in the main conversation using the reference docs:

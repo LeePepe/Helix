@@ -19,6 +19,8 @@ Route to exactly one specialized skill:
 
 If ambiguous between fit/finish and gen-code, ask one clarifying question.
 
+If the user says "ultracode" or asks for an exhaustive/thorough pass, tell the delegated skill to run its **Ultracode Mode** (Workflow-driven fan-out + adversarial verification).
+
 ## Delegation Rule
 
 Once routed, invoke only the target skill and follow it end-to-end.
